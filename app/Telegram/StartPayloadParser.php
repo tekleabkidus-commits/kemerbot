@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Telegram;
 
+use App\Models\TrackingLink;
+
 /**
  * THE single /start payload parser (Principle 2). Handles source codes,
  * ref_<id> referrals, and invalid/malformed/unknown payloads. No other code
@@ -11,9 +13,6 @@ namespace App\Telegram;
  */
 final class StartPayloadParser
 {
-    // Matches tracking-link code rules (spec §5.6): safe charset, bounded length.
-    private const SOURCE_PATTERN = '/^[A-Za-z0-9_-]{1,64}$/';
-
     private const REFERRAL_PATTERN = '/^ref_(\d{1,18})$/';
 
     public function parse(?string $raw): StartPayload
@@ -34,7 +33,8 @@ final class StartPayloadParser
             return StartPayload::invalid();
         }
 
-        if (preg_match(self::SOURCE_PATTERN, $raw) === 1) {
+        // Same charset/length rules as tracking-link codes (spec §5.6).
+        if (preg_match(TrackingLink::CODE_PATTERN, $raw) === 1) {
             return StartPayload::source($raw);
         }
 

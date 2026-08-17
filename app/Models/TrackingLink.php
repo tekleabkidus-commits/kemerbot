@@ -17,6 +17,13 @@ class TrackingLink extends Model
     /** @use HasFactory<TrackingLinkFactory> */
     use HasFactory;
 
+    /**
+     * The one definition of a valid code (spec §5.6: bounded length, safe
+     * charset). Used by admin validation AND the /start payload parser, so a
+     * payload accepted as a source is always a storable tracking-link code.
+     */
+    public const CODE_PATTERN = '/^[A-Za-z0-9_-]{1,64}$/';
+
     protected $fillable = [
         'code',
         'name',

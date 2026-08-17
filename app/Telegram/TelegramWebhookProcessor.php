@@ -75,14 +75,14 @@ final class TelegramWebhookProcessor
      * blocks (kicked) or unblocks (member) the bot — cheaper than waiting
      * for a failed send (spec §5.1, §4.11).
      */
-    private function handleMyChatMember(array $update): void
+    private function handleMyChatMember(array $memberUpdate): void
     {
-        if (($update['chat']['type'] ?? null) !== 'private') {
+        if (($memberUpdate['chat']['type'] ?? null) !== 'private') {
             return;
         }
 
-        $chatId = $update['chat']['id'] ?? null;
-        $status = $update['new_chat_member']['status'] ?? null;
+        $chatId = $memberUpdate['chat']['id'] ?? null;
+        $status = $memberUpdate['new_chat_member']['status'] ?? null;
 
         if ($chatId === null || $status === null) {
             return;

@@ -26,6 +26,23 @@ it('stores an unknown-but-sane source code without any tracking link increment',
         ->and(TrackingLink::query()->count())->toBe(0);
 });
 
+it('applies tracking-link code rules to unknown source codes', function () {
+    // Overlong (65 chars) and unsafe-charset codes must never be stored,
+    // exactly as they could never be tracking-link codes (spec §5.6).
+    postWebhook(telegramMessageUpdate(3005, '/start '.str_repeat('x', 65)));
+    postWebhook(telegramMessageUpdate(3006, '/start bad;code'));
+    postWebhook(telegramMessageUpdate(3007, '/start ok_Code-1'));
+
+    expect(User::query()->where('tg_chat_id', 3005)->first()->source)->toBeNull()
+        ->and(User::query()->where('tg_chat_id', 3006)->first()->source)->toBeNull()
+        ->and(User::query()->where('tg_chat_id', 3007)->first()->source)->toBe('ok_Code-1');
+
+    // Every stored source must satisfy the single shared code pattern.
+    User::query()->whereNotNull('source')->each(function (User $user) {
+        expect(preg_match(TrackingLink::CODE_PATTERN, $user->source))->toBe(1);
+    });
+});
+
 it('ignores malformed payloads silently', function () {
     postWebhook(telegramMessageUpdate(3001, '/start <bad payload!>'));
 
