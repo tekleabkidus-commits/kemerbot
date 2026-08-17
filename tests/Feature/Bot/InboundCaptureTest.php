@@ -13,7 +13,7 @@ beforeEach(function () {
 });
 
 it('captures inbound text messages', function () {
-    postWebhook(telegramMessageUpdate(9001, 'hello sunbet'));
+    postWebhook(telegramMessageUpdate(9001, 'hello kemerbet'));
 
     $user = User::query()->where('tg_chat_id', 9001)->first();
     $message = TelegramMessage::query()->where('user_id', $user->id)->first();
@@ -21,7 +21,7 @@ it('captures inbound text messages', function () {
     expect($message)->not->toBeNull()
         ->and($message->direction)->toBe(MessageDirection::Inbound)
         ->and($message->type)->toBe('text')
-        ->and($message->text)->toBe('hello sunbet')
+        ->and($message->text)->toBe('hello kemerbet')
         ->and($message->tg_message_id)->not->toBeNull();
 });
 

@@ -1,6 +1,6 @@
-# KemerBot — SunBet Telegram Bot Management System
+# KemerBot — KemerBet Telegram Bot Management System
 
-A standalone Laravel 12 application containing the official **SunBet** Telegram bot
+A standalone Laravel 12 application containing the official **KemerBet** Telegram bot
 (webhook mode, EN/AM bilingual), a **Filament v4 admin panel** for the marketing team,
 and a **queue-based sending engine** safe at 100,000+ users.
 
@@ -18,7 +18,7 @@ Deployed on Laravel Cloud (Serverless Postgres + Valkey).
 composer install
 cp .env.example .env && php artisan key:generate
 docker compose up -d                  # Postgres :5445, Redis :6381 (test DB auto-created)
-php artisan migrate:fresh --seed      # owner login: owner@sunbet.et / password (change via SEED_ADMIN_*)
+php artisan migrate:fresh --seed      # owner login: owner@kemerbet.co / password (change via SEED_ADMIN_*)
 php artisan serve                     # panel at http://localhost:8000/admin
 php artisan queue:work redis --queue=telegram-interactive,telegram-broadcast,automation,default
 php artisan schedule:work             # scheduler (broadcasts, automations, retention)
@@ -35,7 +35,7 @@ Tests (never call real Telegram — a full fake is bound in tests):
 1. **BotFather**: create the bot, grab the token, set name/photo/description.
 2. **Env**: set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` (no @), and a random
    `TELEGRAM_WEBHOOK_SECRET`. Secrets live in env only — never in the DB or panel.
-3. **Channel**: add the bot as an **admin** of the SunBet channel (required for reliable
+3. **Channel**: add the bot as an **admin** of the KemerBet channel (required for reliable
    `getChatMember` membership checks), then put the channel ID + URL into
    Administration → Settings.
 4. **Webhook**: `php artisan telegram:set-webhook` (uses `APP_URL`; pass a tunnel URL in

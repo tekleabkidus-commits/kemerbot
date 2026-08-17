@@ -13,9 +13,9 @@ class AdminSeeder extends Seeder
     public function run(): void
     {
         Admin::query()->updateOrCreate(
-            ['email' => env('SEED_ADMIN_EMAIL', 'owner@sunbet.et')],
+            ['email' => env('SEED_ADMIN_EMAIL', 'owner@kemerbet.co')],
             [
-                'name' => 'SunBet Owner',
+                'name' => 'KemerBet Owner',
                 // Override via SEED_ADMIN_PASSWORD before seeding any shared environment.
                 'password' => env('SEED_ADMIN_PASSWORD', 'password'),
                 'role' => AdminRole::Owner,

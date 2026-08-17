@@ -252,7 +252,7 @@ it('localizes steps with english fallback and renders url buttons', function () 
     $step = $automation->steps->first();
     $step->update(['buttons' => [[
         'kind' => 'url',
-        'url' => 'https://sunbet.et',
+        'url' => 'https://kemerbet.co',
         'label' => ['en' => 'Play now', 'am' => 'አሁን ይጫወቱ'],
     ]]]);
     AutomationStepTranslation::factory()->amharic()->create([

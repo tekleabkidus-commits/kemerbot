@@ -26,7 +26,7 @@ class AdminPanelProvider extends PanelProvider
             ->id('admin')
             ->path('admin')
             ->login()
-            ->brandName('SunBet Bot')
+            ->brandName('KemerBet Bot')
             ->colors([
                 'primary' => Color::Amber,
             ])

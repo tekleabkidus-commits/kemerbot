@@ -21,10 +21,10 @@ class SettingsSeeder extends Seeder
             'bot.default_language' => 'en',
             'telegram.send_rate' => (int) config('telegram.send_rate'),
             'broadcast.test_recipient_chat_ids' => [],
-            'webapp.url' => 'https://sunbet.et',
+            'webapp.url' => 'https://kemerbet.co/en/sport',
             'welcome.message' => [
-                'en' => "Welcome to SunBet, {first_name}! ⚽\nUse the menu below to explore matches, promos and more.",
-                'am' => "እንኳን ወደ SunBet በደህና መጡ {first_name}! ⚽\nግጥሚያዎችን፣ ማስተዋወቂያዎችን እና ሌሎችንም ለማየት ከታች ያለውን ምናሌ ይጠቀሙ።",
+                'en' => "Welcome to KemerBet, {first_name}! ⚽\nUse the menu below to explore matches, promos and more.",
+                'am' => "እንኳን ወደ KemerBet በደህና መጡ {first_name}! ⚽\nግጥሚያዎችን፣ ማስተዋወቂያዎችን እና ሌሎችንም ለማየት ከታች ያለውን ምናሌ ይጠቀሙ።",
             ],
             'welcome.media_file_id' => null,
             'features' => [

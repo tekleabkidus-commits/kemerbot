@@ -1,10 +1,10 @@
 # KemerBot — Standing Rules (read before any change)
 
-KemerBot is the SunBet Telegram Bot Management System — a production marketing system for
+KemerBot is the KemerBet Telegram Bot Management System — a production marketing system for
 100,000+ Telegram users. Source of truth: `docs/KEMERBOT-SPEC.md` (Spec v2, authoritative).
 Do **not** re-open settled decisions or re-audit the architecture; raise only genuine blockers.
 
-Internal name **KemerBot**; every user-facing string is branded **SunBet** (sunbet.et).
+Internal name **KemerBot**; every user-facing string is branded **KemerBet** (kemerbet.co).
 
 ## Architectural principles (non-negotiable)
 
@@ -78,4 +78,4 @@ Laravel-native wherever reasonable; justify any third-party addition.
 ## Local dev
 
 Docker Desktop provides Postgres + Redis: `docker compose up -d`. Queue/cache/session on Redis
-(predis client). Tests: `php artisan test` (Pest). DB for tests: `kemerbot_test` (same container).
+(phpredis client). Tests: `php artisan test` (Pest). DB for tests: `kemerbot_test` (same container).

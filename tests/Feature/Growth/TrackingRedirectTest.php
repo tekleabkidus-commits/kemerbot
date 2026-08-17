@@ -10,7 +10,7 @@ it('redirects a valid code to our bot deep link and counts the click', function 
     $response = $this->get('/r/summer24');
 
     $response->assertStatus(302)
-        ->assertRedirect('https://t.me/SunBetTestBot?start=summer24');
+        ->assertRedirect('https://t.me/KemerBetTestBot?start=summer24');
 
     expect($link->refresh()->clicks_count)->toBe(1);
 });
@@ -54,5 +54,5 @@ it('only ever redirects to t.me with the exact validated code', function () {
     TrackingLink::factory()->create(['code' => 'a_b-C9']);
 
     $this->get('/r/a_b-C9')
-        ->assertRedirect('https://t.me/SunBetTestBot?start=a_b-C9');
+        ->assertRedirect('https://t.me/KemerBetTestBot?start=a_b-C9');
 });

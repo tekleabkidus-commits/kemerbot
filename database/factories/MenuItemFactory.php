@@ -30,7 +30,7 @@ class MenuItemFactory extends Factory
         return $this->state(['action_type' => MenuActionType::Submenu]);
     }
 
-    public function url(string $url = 'https://sunbet.et'): static
+    public function url(string $url = 'https://kemerbet.co'): static
     {
         return $this->state([
             'action_type' => MenuActionType::Url,
@@ -38,7 +38,7 @@ class MenuItemFactory extends Factory
         ]);
     }
 
-    public function webapp(string $url = 'https://sunbet.et'): static
+    public function webapp(string $url = 'https://kemerbet.co'): static
     {
         return $this->state([
             'action_type' => MenuActionType::Webapp,

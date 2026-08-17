@@ -34,7 +34,7 @@ it('shows the personal referral link with per-language share text', function () 
 
     $sent = fakeTelegram()->lastSentTo(12001);
 
-    expect($sent['params']['text'])->toContain("https://t.me/SunBetTestBot?start=ref_{$user->id}")
+    expect($sent['params']['text'])->toContain("https://t.me/KemerBetTestBot?start=ref_{$user->id}")
         ->and($sent['params']['text'])->toContain('Invite your friends')
         ->and(fakeTelegram()->callsTo('answerCallbackQuery'))->toHaveCount(1);
 });

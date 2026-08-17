@@ -39,7 +39,7 @@
         <env name="REDIS_PORT" value="6381"/>
         <env name="REDIS_DB" value="15"/>
         <env name="TELEGRAM_BOT_TOKEN" value="0000000000:TEST-TOKEN-NEVER-REAL"/>
-        <env name="TELEGRAM_BOT_USERNAME" value="SunBetTestBot"/>
+        <env name="TELEGRAM_BOT_USERNAME" value="KemerBetTestBot"/>
         <env name="TELEGRAM_WEBHOOK_SECRET" value="test-webhook-secret"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

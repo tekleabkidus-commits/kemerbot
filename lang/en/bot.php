@@ -7,12 +7,12 @@ declare(strict_types=1);
 return [
     'menu_prompt' => 'Choose an option:',
     'back' => '⬅️ Back',
-    'join_gate' => "To use the SunBet bot, please join our channel first. 📣\nTap \"Join channel\", then \"I've joined ✅\".",
+    'join_gate' => "To use the KemerBet bot, please join our channel first. 📣\nTap \"Join channel\", then \"I've joined ✅\".",
     'join_button' => 'Join channel',
     'joined_check_button' => "I've joined ✅",
     'joined_ok' => "Welcome aboard! 🎉 You're all set.",
     'not_member_yet' => "It looks like you haven't joined yet. Tap \"Join channel\" first, then try again.",
     'option_unavailable' => 'This option is no longer available.',
-    'welcome_fallback' => 'Welcome to SunBet, {first_name}! ⚽',
-    'invite_text' => "Invite your friends to SunBet! 🎉\nShare your personal link:\n:link",
+    'welcome_fallback' => 'Welcome to KemerBet, {first_name}! ⚽',
+    'invite_text' => "Invite your friends to KemerBet! 🎉\nShare your personal link:\n:link",
 ];

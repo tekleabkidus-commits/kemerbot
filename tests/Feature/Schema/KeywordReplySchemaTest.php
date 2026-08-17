@@ -21,12 +21,12 @@ it('stores optional buttons with per-language labels', function () {
     $reply = KeywordReply::factory()->create([
         'buttons' => [[
             'kind' => 'url',
-            'url' => 'https://sunbet.et',
-            'label' => ['en' => 'Open SunBet', 'am' => 'SunBet ይክፈቱ'],
+            'url' => 'https://kemerbet.co',
+            'label' => ['en' => 'Open KemerBet', 'am' => 'KemerBet ይክፈቱ'],
         ]],
     ]);
 
-    expect($reply->refresh()->buttons[0]['label']['am'])->toBe('SunBet ይክፈቱ');
+    expect($reply->refresh()->buttons[0]['label']['am'])->toBe('KemerBet ይክፈቱ');
 });
 
 it('cascades translations when a keyword reply is deleted', function () {

@@ -1,8 +1,8 @@
-# KemerBot — SunBet Telegram Bot Management System
+# KemerBot — KemerBet Telegram Bot Management System
 ## Detailed System Documentation (Spec v2 — authoritative)
 
 **Internal project name:** KemerBot (repo `~/projects/kemerbot`)
-**User-facing brand:** SunBet — all bot-visible names, welcome text, and links present as SunBet (site: sunbet.et).
+**User-facing brand:** KemerBet — all bot-visible names, welcome text, and links present as KemerBet (site: kemerbet.co).
 **Status of this document:** This spec supersedes the earlier 14-table planning spec. The architectural audit has already been performed; its corrections (automation user state, failure log, message history, settings, poll correlation, click redirect, attribution rules) are baked in below. Do **not** redo a full audit — flag only genuine blockers.
 
 ---
@@ -11,11 +11,11 @@
 
 A standalone Laravel application containing:
 
-1. The official **SunBet Telegram bot** (webhook mode) — menus, force channel join, keyword auto-replies, EN/AM bilingual.
+1. The official **KemerBet Telegram bot** (webhook mode) — menus, force channel join, keyword auto-replies, EN/AM bilingual.
 2. A **Filament admin panel** for the marketing team — menu builder, broadcast center, automations, tracking links, users, analytics — operable by non-technical marketers with zero code deploys.
 3. A **queue-based sending engine** safe at 100,000+ users, designed so scaling well beyond that does not require a rewrite.
 
-**Standalone means standalone:** no sportsbook backend integration, no referral-platform integration, no SunBet account integration, no dependency on any other SunBet application. BotFather is used once (create bot, name, photo); everything else lives here.
+**Standalone means standalone:** no sportsbook backend integration, no referral-platform integration, no KemerBet account integration, no dependency on any other KemerBet application. BotFather is used once (create bot, name, photo); everything else lives here.
 
 ---
 
@@ -52,7 +52,7 @@ A standalone Laravel application containing:
 3. **Recurring broadcasts** are `broadcasts` rows with a `recurrence` definition, executed by the shared scheduler service. The automation engine's triggers are `user_joined` and `inactive` only; recurring campaigns do NOT create automation records.
 4. **`delay_hours` semantics:** delay since the **previous step** (step 0 relative to trigger time). Documented and tested.
 5. **Attribution is first-touch and immutable.** `source` set only if empty; `referred_by_user_id` set only if empty, must reference an existing *different* user (self-referral blocked); a later `/start` never rewrites either.
-6. **Click tracking is local.** `https://<app-domain>/r/{code}` increments the tracking link's click counter and 302-redirects to `t.me/<bot>?start=<code>`. No dependency on the external SunBet URL shortener (it can optionally sit in front later). No user identification during the anonymous pre-Telegram click.
+6. **Click tracking is local.** `https://<app-domain>/r/{code}` increments the tracking link's click counter and 302-redirects to `t.me/<bot>?start=<code>`. No dependency on the external KemerBet URL shortener (it can optionally sit in front later). No user identification during the anonymous pre-Telegram click.
 7. **Secrets live in env/infrastructure only.** Bot token, webhook secret, encryption keys never appear in the admin UI, database, logs, or audit metadata. Settings screen shows "Telegram Bot: Connected ✓" only.
 8. **Match promo card = Option A:** admin-uploaded image + structured, consistently formatted Telegram caption (teams, kickoff shown in Addis time, odds, CTA button). No server-side image generation.
 9. **Keyword match priority:** exact match → longest `contains` match → lowest position. Input normalized (case, trim, Unicode NFC; Amharic-safe). Deterministic always.
@@ -68,14 +68,14 @@ A standalone Laravel application containing:
 
 ### 5.1 Bot core
 - `/start`: create-or-update user (tg_chat_id unique; refresh first_name/username/language if changed), parse payload (Principle 2), apply attribution (Decision 5), fire `UserJoined` event for automations (new users only), check channel membership, then welcome + main menu or the join gate.
-- **Force channel join:** non-members of the SunBet channel see per-language text + "Join channel" (URL button) + "I've joined ✅" (callback that re-checks). Membership handled by `TelegramMembershipService`: normalizes Telegram member states, updates `users.in_channel` + `channel_checked_at`, degrades gracefully on Telegram errors (fail-open with logged warning rather than locking all users out). Membership older than a configurable TTL is re-checked on next interaction. Setup docs must state the bot needs admin rights in the channel for reliable `getChatMember`.
+- **Force channel join:** non-members of the KemerBet channel see per-language text + "Join channel" (URL button) + "I've joined ✅" (callback that re-checks). Membership handled by `TelegramMembershipService`: normalizes Telegram member states, updates `users.in_channel` + `channel_checked_at`, degrades gracefully on Telegram errors (fail-open with logged warning rather than locking all users out). Membership older than a configurable TTL is re-checked on next interaction. Setup docs must state the bot needs admin rights in the channel for reliable `getChatMember`.
 - Menus render as inline keyboards in the user's language (Decision 12), Back button auto-added on submenus.
 - `last_active_at` updated on every inbound interaction.
 - **Keyword auto-replies** per Decision 9; per-language reply text, optional media + buttons; active flag.
 - 403 on any send → `blocked_bot = true`, `blocked_at = now()`, excluded from all sends (Decision 11 for recovery).
 
 ### 5.2 Menu builder (admin)
-Hierarchical tree editor: drag reorder, create, duplicate, activate/deactivate, delete (with confirmation), EN + AM labels, action selector. Actions: **reply** (text/photo, per-language), **submenu**, **external URL**, **Web App** (Mini App → sunbet.et). Validation prevents invalid configs: submenu requires children to activate, url requires valid URL, reply requires content, no circular parents. Live Telegram-style preview. Changes effective immediately.
+Hierarchical tree editor: drag reorder, create, duplicate, activate/deactivate, delete (with confirmation), EN + AM labels, action selector. Actions: **reply** (text/photo, per-language), **submenu**, **external URL**, **Web App** (Mini App → kemerbet.co). Validation prevents invalid configs: submenu requires children to activate, url requires valid URL, reply requires content, no circular parents. Live Telegram-style preview. Changes effective immediately.
 
 ### 5.3 Broadcast center (admin)
 Seven-step wizard: **Type** (Standard / Match promo / Poll) → **Content** (EN tab, AM tab, media upload, Telegram-style preview, personalization preview, character-limit warnings) → **Buttons** (visual inline-keyboard builder: rows, drag, URL/callback, per-language labels) → **Audience** (filters with live estimated count + human-readable summary) → **Timing** (now / scheduled / recurring; Addis-time picker; past dates blocked) → **Test** (send to configured admin test recipients) → **Review & confirm**.
@@ -268,7 +268,7 @@ Channel ID/URL, Web App URL, test recipients, welcome content = DB settings (adm
 
 ## 17. Telegram & channel setup (document in README)
 
-BotFather: create bot → token → set name/photo/description. Channel: add bot as **admin** of the SunBet channel (required for reliable membership checks) → capture channel ID. Webhook: `setWebhook` with secret token + required `allowed_updates` (message, callback_query, poll, poll_answer); verification via `getWebhookInfo`; local dev via tunnel (e.g., `cloudflared`/`ngrok`).
+BotFather: create bot → token → set name/photo/description. Channel: add bot as **admin** of the KemerBet channel (required for reliable membership checks) → capture channel ID. Webhook: `setWebhook` with secret token + required `allowed_updates` (message, callback_query, poll, poll_answer); verification via `getWebhookInfo`; local dev via tunnel (e.g., `cloudflared`/`ngrok`).
 
 ## 18. Operations runbook (document in `docs/OPERATIONS.md`)
 
@@ -289,4 +289,4 @@ Broadcast stuck/recovery · retrying failed queues · cancelling a broadcast · 
 
 ---
 
-*Spec v2 · 2026-08-17 · Internal name KemerBot, public brand SunBet · Supersedes the 14-table planning spec · Audit corrections incorporated — build from this document.*
+*Spec v2 · 2026-08-17 · Internal name KemerBot, public brand KemerBet · Supersedes the 14-table planning spec · Audit corrections incorporated — build from this document.*

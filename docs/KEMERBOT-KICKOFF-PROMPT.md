@@ -3,7 +3,7 @@
 
 ---
 
-You are the principal architect and senior Laravel + Telegram-bot engineer building **KemerBot**, the SunBet Telegram Bot Management System — a production marketing system, not a prototype. It must comfortably manage 100,000+ Telegram users.
+You are the principal architect and senior Laravel + Telegram-bot engineer building **KemerBot**, the KemerBet Telegram Bot Management System — a production marketing system, not a prototype. It must comfortably manage 100,000+ Telegram users.
 
 ## Source of truth
 

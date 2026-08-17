@@ -31,9 +31,9 @@ it('seeds an owner account idempotently', function () {
 });
 
 it('rejects duplicate emails', function () {
-    Admin::factory()->create(['email' => 'dup@sunbet.et']);
+    Admin::factory()->create(['email' => 'dup@kemerbet.co']);
 
-    expect(fn () => Admin::factory()->create(['email' => 'dup@sunbet.et']))
+    expect(fn () => Admin::factory()->create(['email' => 'dup@kemerbet.co']))
         ->toThrow(QueryException::class);
 });
 
@@ -41,7 +41,7 @@ it('rejects roles outside the enum via check constraint', function () {
     // Raw insert to bypass the enum cast and hit the DB constraint itself.
     expect(fn () => DB::table('admins')->insert([
         'name' => 'Bad Role',
-        'email' => 'bad-role@sunbet.et',
+        'email' => 'bad-role@kemerbet.co',
         'password' => 'irrelevant',
         'role' => 'superadmin',
         'created_at' => now(),

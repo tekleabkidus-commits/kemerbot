@@ -27,7 +27,7 @@ it('creates and immediately sends a broadcast through the wizard', function () {
             'text_am' => 'ታላቅ የሳምንቱ መጨረሻ ዕድሎች {first_name}!',
             'buttons_data' => [[
                 'kind' => 'url',
-                'url' => 'https://sunbet.et',
+                'url' => 'https://kemerbet.co',
                 'label' => ['en' => 'Bet now', 'am' => 'አሁን ይወራረዱ'],
                 'row' => 0,
             ]],

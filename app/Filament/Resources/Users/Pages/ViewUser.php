@@ -27,7 +27,7 @@ class ViewUser extends ViewRecord
                         ->rows(4)
                         ->required()
                         ->maxLength(4000)
-                        ->helperText('Sent from the SunBet bot on the interactive queue.'),
+                        ->helperText('Sent from the KemerBet bot on the interactive queue.'),
                 ])
                 ->action(function (array $data): void {
                     if ($this->record->blocked_bot) {

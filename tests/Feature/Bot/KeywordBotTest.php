@@ -30,7 +30,7 @@ it('replies on exact match, case- and whitespace-insensitive', function () {
 });
 
 it('replies on contains match inside a sentence', function () {
-    keywordRule(['promo'], 'contains', 'Latest promos: sunbet.et/promo');
+    keywordRule(['promo'], 'contains', 'Latest promos: kemerbet.co/promo');
 
     postWebhook(telegramMessageUpdate(7001, 'any promo running today?'));
 
@@ -103,7 +103,7 @@ it('attaches url buttons from the rule definition', function () {
     keywordRule(['app'], 'exact', 'Get the app:', [
         'buttons' => [[
             'kind' => 'url',
-            'url' => 'https://sunbet.et/app',
+            'url' => 'https://kemerbet.co/app',
             'label' => ['en' => 'Open app', 'am' => 'መተግበሪያ ክፈት'],
         ]],
     ]);
@@ -114,6 +114,6 @@ it('attaches url buttons from the rule definition', function () {
 
     expect($keyboard['inline_keyboard'][0][0])->toMatchArray([
         'text' => 'Open app',
-        'url' => 'https://sunbet.et/app',
+        'url' => 'https://kemerbet.co/app',
     ]);
 });

@@ -53,7 +53,7 @@ it('builds the inline keyboard with rows, url and tracked callback buttons', fun
 
     $keyboard = $render($broadcast, User::factory()->create())->replyMarkup['inline_keyboard'];
 
-    expect($keyboard[0][0])->toMatchArray(['text' => 'Open site', 'url' => 'https://sunbet.et'])
+    expect($keyboard[0][0])->toMatchArray(['text' => 'Open site', 'url' => 'https://kemerbet.co'])
         ->and($keyboard[1][0])->toMatchArray([
             'text' => 'Claim bonus',
             'callback_data' => "bc:{$broadcast->id}:{$callback->id}",
@@ -80,7 +80,7 @@ it('formats the match promo caption with kickoff in Addis time', function () {
             // 18:00 UTC = 21:00 Addis (UTC+3).
             'kickoff_at' => '2026-08-22T18:00:00Z',
             'odds' => ['home' => '2.10', 'draw' => '3.20', 'away' => '3.50'],
-            'cta' => 'Bet now on sunbet.et',
+            'cta' => 'Bet now on kemerbet.co',
         ],
     ]);
     BroadcastTranslation::factory()->for($broadcast)->create(['text' => 'Weekend derby!']);
@@ -94,5 +94,5 @@ it('formats the match promo caption with kickoff in Addis time', function () {
         ->and($message->text)->toContain('3.20')
         ->and($message->text)->toContain('3.50')
         ->and($message->text)->toContain('Weekend derby!')
-        ->and($message->text)->toContain('👉 Bet now on sunbet.et');
+        ->and($message->text)->toContain('👉 Bet now on kemerbet.co');
 });

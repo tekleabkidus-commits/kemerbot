@@ -14,19 +14,19 @@ beforeEach(function () {
 it('welcomes english users in english', function () {
     postWebhook(telegramMessageUpdate(4001, '/start', ['language_code' => 'en']));
 
-    expect(fakeTelegram()->lastSentTo(4001)['params']['text'])->toContain('Welcome to SunBet');
+    expect(fakeTelegram()->lastSentTo(4001)['params']['text'])->toContain('Welcome to KemerBet');
 });
 
 it('welcomes amharic users in amharic', function () {
     postWebhook(telegramMessageUpdate(4001, '/start', ['language_code' => 'am']));
 
-    expect(fakeTelegram()->lastSentTo(4001)['params']['text'])->toContain('እንኳን ወደ SunBet');
+    expect(fakeTelegram()->lastSentTo(4001)['params']['text'])->toContain('እንኳን ወደ KemerBet');
 });
 
 it('falls back to the default language for unknown telegram languages', function () {
     postWebhook(telegramMessageUpdate(4001, '/start', ['language_code' => 'ru']));
 
-    expect(fakeTelegram()->lastSentTo(4001)['params']['text'])->toContain('Welcome to SunBet');
+    expect(fakeTelegram()->lastSentTo(4001)['params']['text'])->toContain('Welcome to KemerBet');
 });
 
 it('honors an amharic default language setting', function () {
@@ -34,7 +34,7 @@ it('honors an amharic default language setting', function () {
 
     postWebhook(telegramMessageUpdate(4001, '/start', ['language_code' => 'ru']));
 
-    expect(fakeTelegram()->lastSentTo(4001)['params']['text'])->toContain('እንኳን ወደ SunBet');
+    expect(fakeTelegram()->lastSentTo(4001)['params']['text'])->toContain('እንኳን ወደ KemerBet');
 });
 
 it('renders menu labels in the user language', function () {
