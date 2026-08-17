@@ -1,8 +1,12 @@
 <?php
 
-use Illuminate\Foundation\Inspiring;
-use Illuminate\Support\Facades\Artisan;
+declare(strict_types=1);
 
-Artisan::command('inspire', function () {
-    $this->comment(Inspiring::quote());
-})->purpose('Display an inspiring quote');
+use App\Models\TelegramMessage;
+use Illuminate\Support\Facades\Schedule;
+
+// Spec §2: Laravel Scheduler runs every minute in production (cron).
+Schedule::command('broadcasts:process-due')->everyMinute();
+
+// Retention: prune telegram_messages older than the configured window (spec §6 table 18).
+Schedule::command('model:prune', ['--model' => [TelegramMessage::class]])->daily();

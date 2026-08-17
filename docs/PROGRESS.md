@@ -10,7 +10,7 @@ each batch ends with green tests, a batch report, and a stop for user review.
 | Setup | git, CLAUDE.md, docker-compose, plan | ✅ Done (2026-08-17) |
 | 1 — Foundation & schema | Laravel 12 + Filament v4, all migrations, models, enums, factories, seeders, Pest | ✅ Done (2026-08-17) — 85 tests green |
 | 2 — Bot core | TelegramClient + fake, webhook pipeline, /start + attribution, membership, menus, keywords | ✅ Done (2026-08-17) — 189 tests green |
-| 3 — Admin panel + broadcast engine | Filament resources + 7-step wizard + lifecycle + sender | Pending |
+| 3 — Admin panel + broadcast engine | Filament resources + 7-step wizard + lifecycle + sender | ✅ Done (2026-08-17) — 257 tests green |
 | 4 — Automations + growth + extras | Automation engine, tracking links, referral-lite, dashboard, polls, docs | Pending |
 
 ## Log
@@ -103,3 +103,53 @@ each batch ends with green tests, a batch report, and a stop for user review.
 - Local dev workers: `php artisan queue:work redis --queue=telegram-interactive,telegram-broadcast,automation,default`
   (one command; production splits per-queue workers — documented fully in Batch 4 OPERATIONS.md).
   Webhook registration: `php artisan telegram:set-webhook [tunnel-url]`.
+
+### 2026-08-17 — Pre-Batch-3 fixes
+- `TrackingLink::CODE_PATTERN` is the single code-validation rule, shared by the /start parser
+  (and Batch 3+ admin validation). Tests assert `allowed_updates` ⊇ every update type the
+  webhook processor handles (with a source-sync guard).
+- **Carried forward:** live webhook tunnel test (Batch 2 manual acceptance) — pending user run:
+  `.env` bot credentials → tunnel → `php artisan serve` + `queue:work` → `telegram:set-webhook <url>`.
+
+### 2026-08-17 — Batch 3: Admin panel + broadcast engine
+- **Broadcast engine** (`app/Services/Broadcasts/`): `BroadcastLifecycle` — sole owner of the
+  status machine (atomic DB claim = double-send guard; invalid transitions throw); `AudienceQuery`
+  (all §5.3 filters, blocked always excluded, same code powers wizard live-count + snapshot);
+  `AudienceSnapshot` (Redis list of userId:chatId, cursor-fed, atomic LPOP chunks, retry re-queue
+  with attempts hash, cleanup on terminal states); `BroadcastChunkSender` (render → global rate
+  limiter → classify: 403 blocked+flag / 429 pause+retry / retryable re-queued to tail up to max
+  attempts / permanent → broadcast_failures upsert; ONE atomic counter UPDATE per chunk);
+  `BroadcastRenderer` (per-user locale + {tokens} + click-tracked bc: keyboards + match-card
+  caption with Addis kickoff); `BroadcastTestSender` (EN render, [TEST] prefix, no counters);
+  `BroadcastScheduler` + `NextOccurrenceCalculator` (Addis-time daily/weekly/monthly with month-end
+  clamping; recurring parents act as templates: due tick clones a one-off child + re-arms parent);
+  jobs `PrepareBroadcastJob` / self-chaining `SendBroadcastChunkJob` on telegram-broadcast queue;
+  `broadcasts:process-due` every minute + daily telegram_messages pruning (Prunable).
+- **Panel** (Filament v4): navigation groups per §12; `BroadcastResource` with the 7-step wizard
+  (Type→Content→Buttons→Audience→Timing→Test→Review) incl. live audience estimate + summary,
+  EN preview, in-wizard test send from unsaved state, Addis-time pickers with past dates blocked,
+  progressive validation; table lifecycle actions (Send w/ double-click guard, Test, Cancel with
+  sent-before-cancel, Duplicate); Menus (level-scoped drag reorder, cycle validation, submenu-
+  needs-children rule, Telegram-style preview modal); Auto Replies (tabs EN/AM, media, url
+  buttons); Users (search + filters + basic profile); Admins; read-only Audit Log; Settings page
+  ("Telegram Bot: Connected ✓", owner/marketer key split enforced server-side).
+- **AuthZ + audit**: policies for every resource (Owner/Marketer/Viewer per §5.9), enforced
+  server-side; one `AuditsAdminMutations` observer (admin-context only — bot/scheduler traffic
+  is never audited) + explicit lifecycle/settings audit events; `AuditLogger` strips
+  password/token/secret keys from metadata.
+- Key decisions:
+  - Retryable-send backoff is positional (re-queue to snapshot tail + attempts hash in Redis)
+    instead of sleeping workers — honors "retry with backoff up to max attempts" without stalling
+    the pipeline; 429 handled separately by pausing the global bucket.
+  - 403s during a send get a `broadcast_failures` row (category blocked) AND the blocked counter.
+  - Recurring = template parent + materialized one-off children (stats live on children).
+  - Poll type visible in the wizard but disabled with an honest "arrives next batch" note.
+  - Broadcast edit is locked once sending starts (draft/scheduled only).
+- Tests: **257 passed (614 assertions)** — every audience filter; snapshot freezing; chunked
+  end-to-end sends; 403/429/network/invalid classification; retry-then-succeed and
+  retry-exhausted; counter invariant; resume after simulated worker death; cancellation
+  mid-send; double-send prevention; empty audience; media file_id reuse across a broadcast;
+  scheduling (past blocked, due promotion, recurring materialization with Addis→UTC checks,
+  calculator matrix); renderer (locale fallback, tokens, buttons, match card); test send;
+  click tracking incl. hostile payloads; full panel smoke (all pages render, role gating);
+  Livewire wizard end-to-end (send now / scheduled / recurring / validation); audit coverage.

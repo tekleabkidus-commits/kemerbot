@@ -6,8 +6,10 @@ namespace App\Models;
 
 use App\Enums\MessageDirection;
 use Database\Factories\TelegramMessageFactory;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
@@ -18,6 +20,18 @@ class TelegramMessage extends Model
 {
     /** @use HasFactory<TelegramMessageFactory> */
     use HasFactory;
+
+    use Prunable;
+
+    /** Retention: prune rows older than the configured window (spec §6 table 18). */
+    public function prunable(): Builder
+    {
+        return static::query()->where(
+            'sent_at',
+            '<',
+            now()->subDays((int) config('telegram.message_retention_days')),
+        );
+    }
 
     protected $fillable = [
         'user_id',
