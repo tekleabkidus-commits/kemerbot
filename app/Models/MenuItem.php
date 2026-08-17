@@ -53,4 +53,28 @@ class MenuItem extends Model
     {
         return $this->belongsTo(MediaFile::class);
     }
+
+    /**
+     * True when re-parenting this item under $candidateParentId would create a
+     * cycle (itself, or any of its descendants). Used by admin-side validation;
+     * the bot never renders cycles because they can't be persisted through it.
+     */
+    public function wouldCreateCycle(?int $candidateParentId): bool
+    {
+        if ($candidateParentId === null) {
+            return false;
+        }
+
+        $currentId = $candidateParentId;
+
+        while ($currentId !== null) {
+            if ($currentId === $this->id) {
+                return true;
+            }
+
+            $currentId = MenuItem::query()->whereKey($currentId)->value('parent_id');
+        }
+
+        return false;
+    }
 }

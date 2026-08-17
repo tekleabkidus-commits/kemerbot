@@ -34,6 +34,10 @@
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
+        <!-- Real Redis for rate-limiter/dedupe behavior, isolated on DB 15 -->
+        <env name="REDIS_HOST" value="127.0.0.1"/>
+        <env name="REDIS_PORT" value="6381"/>
+        <env name="REDIS_DB" value="15"/>
         <env name="TELEGRAM_BOT_TOKEN" value="0000000000:TEST-TOKEN-NEVER-REAL"/>
         <env name="TELEGRAM_BOT_USERNAME" value="SunBetTestBot"/>
         <env name="TELEGRAM_WEBHOOK_SECRET" value="test-webhook-secret"/>
