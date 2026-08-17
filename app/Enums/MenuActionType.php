@@ -10,4 +10,5 @@ enum MenuActionType: string
     case Submenu = 'submenu';
     case Url = 'url';
     case Webapp = 'webapp';
+    case Invite = 'invite';
 }

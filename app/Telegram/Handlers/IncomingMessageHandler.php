@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Telegram\Handlers;
 
-use App\Enums\BotLanguage;
 use App\Models\KeywordReply;
 use App\Models\User;
 use App\Services\Bot\BotLocaleResolver;
 use App\Services\Bot\BotMessageSender;
+use App\Services\Bot\EmbeddedButtonsRenderer;
 use App\Services\Bot\InboundMessageRecorder;
 use App\Services\Bot\KeywordMatcher;
 use App\Services\Bot\UserService;
@@ -29,6 +29,7 @@ final class IncomingMessageHandler
         private readonly KeywordMatcher $keywords,
         private readonly BotLocaleResolver $locale,
         private readonly BotMessageSender $sender,
+        private readonly EmbeddedButtonsRenderer $embeddedButtons,
     ) {}
 
     public function handle(array $message): void
@@ -75,27 +76,7 @@ final class IncomingMessageHandler
             $user,
             $translation->reply_text,
             $rule->mediaFile,
-            $this->keyboardFor($rule, $lang),
+            $this->embeddedButtons->render($rule->buttons, $lang),
         );
-    }
-
-    /** Build an inline keyboard from the rule's embedded buttons (URL kind only). */
-    private function keyboardFor(KeywordReply $rule, BotLanguage $lang): ?array
-    {
-        $rows = [];
-
-        foreach ($rule->buttons ?? [] as $button) {
-            if (($button['kind'] ?? null) !== 'url' || empty($button['url'])) {
-                continue;
-            }
-
-            $label = $this->locale->pickFromMap($button['label'] ?? null, $lang);
-
-            if ($label !== null) {
-                $rows[] = [['text' => $label, 'url' => $button['url']]];
-            }
-        }
-
-        return $rows === [] ? null : ['inline_keyboard' => $rows];
     }
 }

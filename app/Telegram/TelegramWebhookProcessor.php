@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Telegram;
 
 use App\Models\User;
+use App\Services\Bot\PollService;
 use App\Services\Bot\UserService;
 use App\Telegram\Handlers\CallbackQueryHandler;
 use App\Telegram\Handlers\IncomingMessageHandler;
@@ -22,6 +23,7 @@ final class TelegramWebhookProcessor
         private readonly IncomingMessageHandler $messageHandler,
         private readonly CallbackQueryHandler $callbackHandler,
         private readonly UserService $users,
+        private readonly PollService $polls,
     ) {}
 
     public function process(array $update): void
@@ -44,9 +46,14 @@ final class TelegramWebhookProcessor
             return;
         }
 
-        if (isset($update['poll']) || isset($update['poll_answer'])) {
-            // Poll ingestion lands with the poll feature in Batch 4 (poll_instances).
-            Log::info('telegram.update.poll_deferred', ['update_id' => $update['update_id'] ?? null]);
+        if (isset($update['poll']) && is_array($update['poll'])) {
+            $this->polls->ingestPollUpdate($update['poll']);
+
+            return;
+        }
+
+        if (isset($update['poll_answer']) && is_array($update['poll_answer'])) {
+            $this->polls->ingestPollAnswer($update['poll_answer']);
 
             return;
         }

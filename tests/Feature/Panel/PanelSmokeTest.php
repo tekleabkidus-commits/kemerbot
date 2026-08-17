@@ -42,6 +42,11 @@ it('renders every panel page for an owner', function (string $path) {
     '/admin/admins',
     '/admin/audit-logs',
     '/admin/settings',
+    '/admin/automations',
+    '/admin/automations/create',
+    '/admin/tracking-links',
+    '/admin/tracking-links/create',
+    '/admin/polls',
 ]);
 
 it('lets a viewer browse but hides admin-only pages', function () {

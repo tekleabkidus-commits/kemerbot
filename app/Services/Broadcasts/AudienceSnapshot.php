@@ -50,6 +50,14 @@ final class AudienceSnapshot
             Redis::rpush($key, ...$buffer);
         }
 
+        // TTL backstop: no legitimate broadcast runs this long (100k @ 25/s
+        // ≈ 67 min), so even a crashed run can't leak the key forever.
+        if ($count > 0) {
+            $ttl = (int) config('telegram.snapshot_orphan_hours') * 3600;
+            Redis::expire($key, $ttl);
+            Redis::expire($this->attemptsKey($broadcast->id), $ttl);
+        }
+
         return $count;
     }
 

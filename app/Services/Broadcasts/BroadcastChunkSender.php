@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Services\Broadcasts;
 
+use App\Enums\BroadcastType;
 use App\Enums\FailureCategory;
 use App\Enums\MediaKind;
 use App\Models\Broadcast;
 use App\Models\BroadcastFailure;
+use App\Models\PollInstance;
 use App\Models\User;
+use App\Services\Bot\BotLocaleResolver;
 use App\Services\Bot\UserService;
 use App\Services\Telegram\TelegramClient;
 use App\Services\Telegram\TelegramRateLimiter;
@@ -30,6 +33,7 @@ final class BroadcastChunkSender
         private readonly TelegramClient $client,
         private readonly TelegramRateLimiter $limiter,
         private readonly UserService $users,
+        private readonly BotLocaleResolver $locale,
     ) {}
 
     /**
@@ -77,6 +81,10 @@ final class BroadcastChunkSender
     /** @return 'sent'|'blocked'|'failed'|'requeued' */
     private function sendToUser(Broadcast $broadcast, User $user): string
     {
+        if ($broadcast->type === BroadcastType::Poll) {
+            return $this->sendPollTo($broadcast, $user);
+        }
+
         $message = $this->renderer->render($broadcast, $user);
         $response = $this->attemptSend($broadcast, $user, $message);
 
@@ -86,6 +94,59 @@ final class BroadcastChunkSender
             return 'sent';
         }
 
+        return $this->classifyFailure($broadcast, $user, $response);
+    }
+
+    /**
+     * Native poll sends (spec §5.8): localized question/options; the returned
+     * Telegram poll id is correlated via poll_instances (documented exception).
+     *
+     * @return 'sent'|'blocked'|'failed'|'requeued'
+     */
+    private function sendPollTo(Broadcast $broadcast, User $user): string
+    {
+        $poll = $broadcast->poll;
+
+        if ($poll === null) {
+            $this->recordFailure($broadcast, $user, TelegramResponse::failure(0, 'poll broadcast has no poll definition'), FailureCategory::Other);
+
+            return 'failed';
+        }
+
+        $lang = $this->locale->resolve($user);
+        $question = $this->locale->pickFromMap($poll->question, $lang) ?? '?';
+        $options = $poll->options[$lang->value] ?? $poll->options['en'] ?? [];
+
+        $this->limiter->acquire();
+        $response = $this->client->sendPoll($user->tg_chat_id, $question, $options, $poll->is_anonymous);
+
+        if ($response->rateLimited()) {
+            $this->limiter->pause($response->retryAfter ?? 3);
+            $this->limiter->acquire();
+            $response = $this->client->sendPoll($user->tg_chat_id, $question, $options, $poll->is_anonymous);
+        }
+
+        if ($response->successful()) {
+            $tgPollId = is_array($response->result) ? ($response->result['poll']['id'] ?? null) : null;
+
+            if ($tgPollId !== null) {
+                PollInstance::query()->create([
+                    'poll_id' => $poll->id,
+                    'user_id' => $user->id,
+                    'tg_poll_id' => (string) $tgPollId,
+                    'sent_at' => now(),
+                ]);
+            }
+
+            return 'sent';
+        }
+
+        return $this->classifyFailure($broadcast, $user, $response);
+    }
+
+    /** @return 'blocked'|'failed'|'requeued' */
+    private function classifyFailure(Broadcast $broadcast, User $user, TelegramResponse $response): string
+    {
         if ($response->blockedByUser()) {
             $this->users->markBlocked($user);
             $this->recordFailure($broadcast, $user, $response, FailureCategory::Blocked);
@@ -94,9 +155,7 @@ final class BroadcastChunkSender
         }
 
         if ($response->retryable()) {
-            $attempts = $this->snapshot->attemptsFor($broadcast->id, $user->id);
-
-            if ($attempts < (int) config('telegram.send_max_attempts')) {
+            if ($this->snapshot->attemptsFor($broadcast->id, $user->id) < (int) config('telegram.send_max_attempts')) {
                 $this->snapshot->requeueForRetry($broadcast->id, $user->id, $user->tg_chat_id);
 
                 return 'requeued';

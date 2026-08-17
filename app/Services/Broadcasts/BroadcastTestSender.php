@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Broadcasts;
 
 use App\Enums\BotLanguage;
+use App\Enums\BroadcastType;
 use App\Enums\MediaKind;
 use App\Models\Broadcast;
 use App\Models\User;
@@ -41,16 +42,26 @@ final class BroadcastTestSender
         $sent = 0;
 
         foreach ($recipients as $chatId) {
-            $standIn = new User(['first_name' => 'Test', 'language' => 'en']);
-            $standIn->tg_chat_id = $chatId;
-
-            $message = $this->renderer->renderForLanguage($broadcast, BotLanguage::En, $standIn);
-
             $this->limiter->acquire();
 
-            $response = $message->media === null
-                ? $this->client->sendText($chatId, '[TEST] '.$message->text, $message->replyMarkup)
-                : $this->sendMedia($chatId, $message);
+            if ($broadcast->type === BroadcastType::Poll && $broadcast->poll !== null) {
+                // Test polls create no poll_instances — never counted.
+                $response = $this->client->sendPoll(
+                    $chatId,
+                    '[TEST] '.($broadcast->poll->question['en'] ?? '?'),
+                    $broadcast->poll->options['en'] ?? [],
+                    $broadcast->poll->is_anonymous,
+                );
+            } else {
+                $standIn = new User(['first_name' => 'Test', 'language' => 'en']);
+                $standIn->tg_chat_id = $chatId;
+
+                $message = $this->renderer->renderForLanguage($broadcast, BotLanguage::En, $standIn);
+
+                $response = $message->media === null
+                    ? $this->client->sendText($chatId, '[TEST] '.$message->text, $message->replyMarkup)
+                    : $this->sendMedia($chatId, $message);
+            }
 
             if ($response->successful()) {
                 $sent++;

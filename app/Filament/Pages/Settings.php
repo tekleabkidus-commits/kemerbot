@@ -162,23 +162,34 @@ class Settings extends Page
             $mediaId = FormMedia::resolveMediaFileId($state['welcome_media_upload'], $currentMedia);
         }
 
+        // Disabled fields never dehydrate (marketers don't submit owner-only
+        // keys), so absent state falls back to the stored value = "no change".
+        $features = (array) $settings->get('features', []);
+
         $values = [
-            'channel.id' => filled($state['channel_id'] ?? null) ? $state['channel_id'] : null,
-            'channel.url' => $state['channel_url'] ?? null,
-            'bot.default_language' => $state['default_language'],
-            'telegram.send_rate' => (int) $state['send_rate'],
-            'broadcast.test_recipient_chat_ids' => array_values(array_filter(array_map('intval', $state['test_recipients'] ?? []))),
-            'webapp.url' => $state['webapp_url'] ?? null,
-            'welcome.message' => ['en' => $state['welcome_en'], 'am' => $state['welcome_am']],
+            'channel.id' => array_key_exists('channel_id', $state)
+                ? (filled($state['channel_id']) ? $state['channel_id'] : null)
+                : $settings->get('channel.id'),
+            'channel.url' => $state['channel_url'] ?? $settings->get('channel.url'),
+            'bot.default_language' => $state['default_language'] ?? $settings->get('bot.default_language', 'en'),
+            'telegram.send_rate' => (int) ($state['send_rate'] ?? $settings->get('telegram.send_rate', (int) config('telegram.send_rate'))),
+            'broadcast.test_recipient_chat_ids' => array_key_exists('test_recipients', $state)
+                ? array_values(array_filter(array_map('intval', (array) $state['test_recipients'])))
+                : (array) $settings->get('broadcast.test_recipient_chat_ids', []),
+            'webapp.url' => $state['webapp_url'] ?? $settings->get('webapp.url'),
+            'welcome.message' => [
+                'en' => $state['welcome_en'] ?? ((array) $settings->get('welcome.message', []))['en'] ?? null,
+                'am' => $state['welcome_am'] ?? ((array) $settings->get('welcome.message', []))['am'] ?? null,
+            ],
             'welcome.media_file_id' => $mediaId,
             'features' => [
-                'referrals' => (bool) $state['feature_referrals'],
-                'polls' => (bool) $state['feature_polls'],
-                'mini_app' => (bool) $state['feature_mini_app'],
+                'referrals' => (bool) ($state['feature_referrals'] ?? $features['referrals'] ?? true),
+                'polls' => (bool) ($state['feature_polls'] ?? $features['polls'] ?? true),
+                'mini_app' => (bool) ($state['feature_mini_app'] ?? $features['mini_app'] ?? true),
             ],
         ];
 
-        $changedKeys = [];
+        $changes = [];
 
         foreach ($values as $key => $value) {
             // Server-side per-key enforcement: silently skip keys this role
@@ -187,14 +198,18 @@ class Settings extends Page
                 continue;
             }
 
-            if ($settings->get($key) !== $value) {
+            $previous = $settings->get($key);
+
+            if ($previous !== $value) {
                 $settings->set($key, $value);
-                $changedKeys[] = $key;
+                // Old→new values are safe here by design: secrets never live
+                // in settings (spec §4.7), and AuditLogger sanitizes anyway.
+                $changes[$key] = ['from' => $previous, 'to' => $value];
             }
         }
 
-        if ($changedKeys !== []) {
-            app(AuditLogger::class)->log('settings.updated', null, ['keys' => $changedKeys]);
+        if ($changes !== []) {
+            app(AuditLogger::class)->log('settings.updated', null, ['changed' => $changes]);
         }
 
         Notification::make()->title('Settings saved')->success()->send();

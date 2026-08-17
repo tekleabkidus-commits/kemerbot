@@ -7,6 +7,10 @@ use Illuminate\Support\Facades\Schedule;
 
 // Spec §2: Laravel Scheduler runs every minute in production (cron).
 Schedule::command('broadcasts:process-due')->everyMinute();
+Schedule::command('automations:run')->everyMinute();
 
 // Retention: prune telegram_messages older than the configured window (spec §6 table 18).
 Schedule::command('model:prune', ['--model' => [TelegramMessage::class]])->daily();
+
+// Retention: reclaim Redis snapshots for missing/terminal broadcasts (spec §7).
+Schedule::command('broadcasts:sweep-orphans')->hourly();

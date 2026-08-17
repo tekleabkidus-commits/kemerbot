@@ -26,6 +26,7 @@ class AutomationStep extends Model
         'delay_hours',
         'media_file_id',
         'buttons',
+        'sent_count',
     ];
 
     protected function casts(): array
@@ -34,6 +35,7 @@ class AutomationStep extends Model
             'step_no' => 'integer',
             'delay_hours' => 'integer',
             'buttons' => 'array',
+            'sent_count' => 'integer',
         ];
     }
 

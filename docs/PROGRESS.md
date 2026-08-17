@@ -11,7 +11,7 @@ each batch ends with green tests, a batch report, and a stop for user review.
 | 1 — Foundation & schema | Laravel 12 + Filament v4, all migrations, models, enums, factories, seeders, Pest | ✅ Done (2026-08-17) — 85 tests green |
 | 2 — Bot core | TelegramClient + fake, webhook pipeline, /start + attribution, membership, menus, keywords | ✅ Done (2026-08-17) — 189 tests green |
 | 3 — Admin panel + broadcast engine | Filament resources + 7-step wizard + lifecycle + sender | ✅ Done (2026-08-17) — 257 tests green |
-| 4 — Automations + growth + extras | Automation engine, tracking links, referral-lite, dashboard, polls, docs | Pending |
+| 4 — Automations + growth + extras | Automation engine, tracking links, referral-lite, dashboard, polls, docs | ✅ Done (2026-08-17) — 310 tests green |
 
 ## Log
 
@@ -153,3 +153,46 @@ each batch ends with green tests, a batch report, and a stop for user review.
   calculator matrix); renderer (locale fallback, tokens, buttons, match card); test send;
   click tracking incl. hostile payloads; full panel smoke (all pages render, role gating);
   Livewire wizard end-to-end (send now / scheduled / recurring / validation); audit coverage.
+
+### 2026-08-17 — Batch 4: Automations, growth, extras
+- **Automation engine**: `AutomationEnroller` (UserJoined listener → welcome drips with
+  constant trigger_key = once ever; scheduler pass enrolls inactive users with date-scoped
+  keys, ≥1-day effective cooldown, never while active/cooldown), `AutomationRunner`
+  (per-row compare-and-swap claim: one UPDATE guarded on id+status+current_step_no+
+  next_step_at advances the state — a racing tick's CAS matches zero rows, proven by test),
+  `SendAutomationStepJob` (localized, tokened, embedded url buttons, global rate limiter,
+  per-step sent_count, blocked-skip, paused-skip). Pause freezes/resume continues (§4.10).
+- **Growth**: `/r/{code}` redirect (route-constraint + CODE_PATTERN, active links only,
+  Location built solely from config bot username + validated code — open-redirect-proof by
+  construction, hostile-code test matrix); TrackingLink resource (code immutable once
+  traffic, server-side); invite menu action (constraint migration) + invite:show handler
+  (personal ref link, EN/AM share text, feature toggle) + TopReferrers leaderboard widget.
+- **Polls**: wizard poll type live (question/options EN/AM, 2–10, anonymity); chunk sender
+  sends localized native polls and records poll_instances; ingestion: `poll` updates are
+  the single counting source (authoritative per-instance counts in a Redis hash, summed
+  into polls.answer_counts — retraction-safe, no double counting), `poll_answer` marks
+  voter activity/blocked-recovery only; read-only Polls resource with results/percentages.
+- **Dashboard**: `DashboardMetrics` (5-min cache; Addis-day bucketing with zero-fill) +
+  widgets: KPIs, daily joins & blocked trend lines, source bars (single validated hues
+  #d97706/#4f46e5, light+dark checks pass), broadcast performance, engagement, recent
+  campaigns, top referrers, SystemHealth (live Redis: queue depths, running/failed
+  broadcasts, last webhook OK, last TG API error — breadcrumbs written by webhook + client).
+  Cold load ≈ 12 indexed aggregate queries; warm loads zero SQL.
+- **Profiles + 1:1**: full user profile (engagement, automation journeys, polls received,
+  conversation view) + Send message action → `SendDirectMessageJob` on telegram-interactive,
+  recorded in telegram_messages, audited.
+- **Retention**: telegram_messages Prunable (90d, daily), snapshot 48h TTL backstop at
+  build + `broadcasts:sweep-orphans` hourly (terminal/missing broadcasts).
+- **Schema fixes (column/constraint level, flagged)**: `automation_steps.sent_count`
+  (spec §5.5 required per-step counters; table 15 omitted it) and `invite` added to the
+  menu action check constraint (spec §5.6 names it a menu action). No new tables.
+- Settings audits now record old→new values (safe by design: no secrets in settings).
+- Docs: README (setup, tunnel webhook, worker/scheduler table) + docs/OPERATIONS.md (§18
+  runbook: stuck broadcasts, retries, cancellation, pause, token rotation, channel change,
+  Redis restart, deploy-during-broadcast, Laravel Cloud checklist).
+- Known deviations (documented): per-user "polls answered" not stored (schema-minimal
+  poll_instances) — profile shows polls received; anonymous-poll per-instance counts live
+  in Redis (lost counts re-converge from later updates); automation step is at-most-once
+  after claim (scheduler death between claim and dispatch skips one step — OPERATIONS.md).
+- Tests: **310 passed (747 assertions)**.
+- Carried forward: live webhook tunnel test (needs real bot token; instructions in README).

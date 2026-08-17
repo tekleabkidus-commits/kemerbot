@@ -21,6 +21,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\TimePicker;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Section;
@@ -61,10 +62,6 @@ class BroadcastWizard
                     'match_card' => 'Match promo — image + structured match caption',
                     'poll' => 'Poll — native Telegram poll',
                 ])
-                ->descriptions([
-                    'poll' => 'Arrives with the polls feature in the next batch.',
-                ])
-                ->disableOptionWhen(fn (string $value): bool => $value === 'poll')
                 ->default('standard')
                 ->required()
                 ->live(),
@@ -93,7 +90,36 @@ class BroadcastWizard
                     TextInput::make('tf_odds_draw')->label('Odds — draw (X)'),
                     TextInput::make('tf_odds_away')->label('Odds — away (2)'),
                 ]),
+            Section::make('Poll')
+                ->visible(fn (Get $get): bool => $get('type') === 'poll')
+                ->schema([
+                    TextInput::make('poll_question_en')
+                        ->label('Question (EN)')
+                        ->maxLength(300)
+                        ->required(fn (Get $get): bool => $get('type') === 'poll'),
+                    TextInput::make('poll_question_am')
+                        ->label('Question (AM)')
+                        ->maxLength(300)
+                        ->helperText('Optional — falls back to English.'),
+                    Repeater::make('poll_options')
+                        ->label('Options (2–10)')
+                        ->schema([
+                            TextInput::make('en')->label('Option (EN)')->required()->maxLength(100),
+                            TextInput::make('am')->label('Option (AM)')->maxLength(100),
+                        ])
+                        ->columns(2)
+                        ->minItems(2)
+                        ->maxItems(10)
+                        ->defaultItems(2)
+                        ->reorderable()
+                        ->required(fn (Get $get): bool => $get('type') === 'poll'),
+                    Toggle::make('poll_is_anonymous')
+                        ->label('Anonymous poll')
+                        ->default(true)
+                        ->helperText('Results aggregate on the dashboard either way.'),
+                ]),
             Tabs::make('Message')
+                ->visible(fn (Get $get): bool => $get('type') !== 'poll')
                 ->tabs([
                     Tab::make('English')
                         ->schema([
@@ -102,7 +128,7 @@ class BroadcastWizard
                                 ->rows(6)
                                 ->live(onBlur: true)
                                 ->maxLength(4096)
-                                ->required()
+                                ->required(fn (Get $get): bool => $get('type') !== 'poll')
                                 ->helperText('Personalization: {first_name}. Telegram limit: 4096 characters — 1024 when media is attached.'),
                             FileUpload::make('media_en_upload')
                                 ->label('Media (EN)')
@@ -163,8 +189,11 @@ class BroadcastWizard
     public static function buttonsStep(): array
     {
         return [
+            Text::make('Native polls carry no inline keyboard — this step is skipped for poll campaigns.')
+                ->visible(fn (Get $get): bool => $get('type') === 'poll'),
             Repeater::make('buttons_data')
                 ->label('Inline keyboard')
+                ->visible(fn (Get $get): bool => $get('type') !== 'poll')
                 ->schema([
                     Select::make('kind')
                         ->options(['url' => 'URL — opens a link', 'callback' => 'Callback — tracked tap'])

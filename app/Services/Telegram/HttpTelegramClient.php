@@ -7,6 +7,7 @@ namespace App\Services\Telegram;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Redis;
 
 /**
  * Production Telegram Bot API client. The bot token appears only in the
@@ -145,6 +146,7 @@ final class HttpTelegramClient implements TelegramClient
         } catch (ConnectionException $e) {
             $description = $this->scrub($e->getMessage());
             Log::warning('telegram.api.network_error', ['method' => $method, 'error' => $description]);
+            $this->recordLastError($method, null, $description);
 
             return TelegramResponse::networkFailure($description);
         }
@@ -176,9 +178,21 @@ final class HttpTelegramClient implements TelegramClient
                 'description' => $description,
                 'retry_after' => $retryAfter,
             ]);
+            $this->recordLastError($method, $errorCode, $description);
         }
 
         return TelegramResponse::failure($errorCode, $description, $retryAfter !== null ? (int) $retryAfter : null);
+    }
+
+    /** Admin-visible health breadcrumb (spec §13); always secret-free. */
+    private function recordLastError(string $method, ?int $code, string $description): void
+    {
+        Redis::set('telegram:last_api_error', json_encode([
+            'method' => $method,
+            'code' => $code,
+            'description' => mb_substr($description, 0, 200),
+            'at' => now()->toIso8601String(),
+        ]), 'EX', 7 * 86400);
     }
 
     /** Never let the bot token leak into logs or exceptions (spec §4.7). */

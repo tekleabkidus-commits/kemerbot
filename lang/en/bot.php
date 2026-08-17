@@ -14,4 +14,5 @@ return [
     'not_member_yet' => "It looks like you haven't joined yet. Tap \"Join channel\" first, then try again.",
     'option_unavailable' => 'This option is no longer available.',
     'welcome_fallback' => 'Welcome to SunBet, {first_name}! ⚽',
+    'invite_text' => "Invite your friends to SunBet! 🎉\nShare your personal link:\n:link",
 ];

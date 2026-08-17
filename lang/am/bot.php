@@ -12,4 +12,5 @@ return [
     'not_member_yet' => 'ገና ያልተቀላቀሉ ይመስላል። መጀመሪያ «ቻናሉን ይቀላቀሉ» የሚለውን ይጫኑ፣ ከዚያ እንደገና ይሞክሩ።',
     'option_unavailable' => 'ይህ አማራጭ ከአሁን በኋላ አይገኝም።',
     'welcome_fallback' => 'እንኳን ወደ SunBet በደህና መጡ {first_name}! ⚽',
+    'invite_text' => "ጓደኞችዎን ወደ SunBet ይጋብዙ! 🎉\nየግል ማስፈንጠሪያዎን ያጋሩ፦\n:link",
 ];

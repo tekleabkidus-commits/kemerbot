@@ -59,6 +59,20 @@ class CreateBroadcast extends CreateRecord
             ]);
         }
 
+        if (($state['type'] ?? null) === 'poll') {
+            $broadcast->poll()->create([
+                'question' => array_filter([
+                    'en' => $state['poll_question_en'] ?? null,
+                    'am' => $state['poll_question_am'] ?? null,
+                ], fn ($v) => filled($v)),
+                'options' => [
+                    'en' => array_values(array_filter(array_column($state['poll_options'] ?? [], 'en'), 'filled')),
+                    'am' => array_values(array_filter(array_column($state['poll_options'] ?? [], 'am'), 'filled')),
+                ],
+                'is_anonymous' => (bool) ($state['poll_is_anonymous'] ?? true),
+            ]);
+        }
+
         foreach (($state['buttons_data'] ?? []) as $index => $row) {
             if (! filled($row['label']['en'] ?? null)) {
                 continue;

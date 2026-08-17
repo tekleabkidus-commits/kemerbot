@@ -56,6 +56,7 @@ class MenuItemForm
                                 MenuActionType::Submenu->value => 'Submenu — open child items',
                                 MenuActionType::Url->value => 'External URL',
                                 MenuActionType::Webapp->value => 'Web App (Mini App)',
+                                MenuActionType::Invite->value => 'Invite friends — personal referral link',
                             ])
                             ->default(MenuActionType::Reply->value)
                             ->required()

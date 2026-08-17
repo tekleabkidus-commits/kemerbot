@@ -1,0 +1,116 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Models\Poll;
+use App\Models\PollInstance;
+use App\Models\User;
+use App\Services\Broadcasts\BroadcastLifecycle;
+use App\Services\Broadcasts\BroadcastTestSender;
+use App\Services\SettingsService;
+use Database\Seeders\SettingsSeeder;
+
+beforeEach(function () {
+    $this->seed(SettingsSeeder::class);
+});
+
+it('sends native polls and correlates every instance', function () {
+    User::factory()->count(2)->create();
+    User::factory()->amharic()->create();
+    $poll = Poll::factory()->create();
+
+    app(BroadcastLifecycle::class)->start($poll->broadcast);
+
+    $broadcast = $poll->broadcast->refresh();
+    $pollCalls = fakeTelegram()->callsTo('sendPoll');
+
+    expect($broadcast->sent)->toBe(3)
+        ->and($pollCalls)->toHaveCount(3)
+        ->and(PollInstance::query()->count())->toBe(3)
+        ->and(PollInstance::query()->pluck('tg_poll_id')->unique())->toHaveCount(3);
+
+    // Amharic users get the Amharic question and options.
+    $amCall = collect($pollCalls)->first(fn (array $c) => str_contains($c['params']['question'], 'ማን'));
+    expect($amCall)->not->toBeNull()
+        ->and($amCall['params']['options'][0])->toBe('ቅዱስ ጊዮርጊስ');
+});
+
+it('aggregates poll updates per instance and sums the totals', function () {
+    $poll = Poll::factory()->create();
+    PollInstance::factory()->for($poll)->create(['tg_poll_id' => 'inst-1']);
+    PollInstance::factory()->for($poll)->create(['tg_poll_id' => 'inst-2']);
+
+    postWebhook([
+        'update_id' => 700001,
+        'poll' => [
+            'id' => 'inst-1',
+            'options' => [['text' => 'A', 'voter_count' => 3], ['text' => 'B', 'voter_count' => 1]],
+        ],
+    ]);
+    postWebhook([
+        'update_id' => 700002,
+        'poll' => [
+            'id' => 'inst-2',
+            'options' => [['text' => 'A', 'voter_count' => 2], ['text' => 'B', 'voter_count' => 4]],
+        ],
+    ]);
+
+    expect($poll->refresh()->answer_counts)->toEqual(['0' => 5, '1' => 5]);
+});
+
+it('handles re-votes idempotently: latest instance counts replace, never stack', function () {
+    $poll = Poll::factory()->create();
+    PollInstance::factory()->for($poll)->create(['tg_poll_id' => 'inst-1']);
+
+    postWebhook([
+        'update_id' => 700003,
+        'poll' => ['id' => 'inst-1', 'options' => [['text' => 'A', 'voter_count' => 1], ['text' => 'B', 'voter_count' => 0]]],
+    ]);
+    // The voter retracts and votes B instead — Telegram resends authoritative counts.
+    postWebhook([
+        'update_id' => 700004,
+        'poll' => ['id' => 'inst-1', 'options' => [['text' => 'A', 'voter_count' => 0], ['text' => 'B', 'voter_count' => 1]]],
+    ]);
+
+    expect($poll->refresh()->answer_counts)->toEqual(['0' => 0, '1' => 1]);
+});
+
+it('ignores updates for unknown poll instances', function () {
+    postWebhook([
+        'update_id' => 700005,
+        'poll' => ['id' => 'ghost', 'options' => [['text' => 'A', 'voter_count' => 9]]],
+    ]);
+
+    expect(Poll::query()->count())->toBe(0);
+});
+
+it('treats poll answers as user activity with blocked recovery', function () {
+    $poll = Poll::factory()->create();
+    $user = User::factory()->blocked()->create(['last_active_at' => now()->subDays(10)]);
+    PollInstance::factory()->for($poll)->create(['tg_poll_id' => 'inst-9', 'user_id' => $user->id]);
+
+    postWebhook([
+        'update_id' => 700006,
+        'poll_answer' => [
+            'poll_id' => 'inst-9',
+            'user' => ['id' => $user->tg_chat_id, 'first_name' => $user->first_name],
+            'option_ids' => [0],
+        ],
+    ]);
+
+    $user->refresh();
+
+    expect($user->last_active_at->isToday())->toBeTrue()
+        ->and($user->blocked_bot)->toBeFalse();
+});
+
+it('test-sends polls without creating instances', function () {
+    app(SettingsService::class)->set('broadcast.test_recipient_chat_ids', [111]);
+    $poll = Poll::factory()->create();
+
+    $result = app(BroadcastTestSender::class)->send($poll->broadcast->load('poll'));
+
+    expect($result['sent'])->toBe(1)
+        ->and(fakeTelegram()->callsTo('sendPoll')[0]['params']['question'])->toStartWith('[TEST]')
+        ->and(PollInstance::query()->count())->toBe(0);
+});

@@ -15,6 +15,7 @@ use App\Services\Bot\BotMessageSender;
 use App\Services\Bot\MenuRenderer;
 use App\Services\Bot\UserService;
 use App\Services\Bot\WelcomeService;
+use App\Services\SettingsService;
 use App\Services\Telegram\TelegramClient;
 use App\Services\Telegram\TelegramMembershipService;
 use App\Telegram\CallbackAction;
@@ -37,6 +38,7 @@ final class CallbackQueryHandler
         private readonly MenuRenderer $menus,
         private readonly BotLocaleResolver $locale,
         private readonly BotMessageSender $sender,
+        private readonly SettingsService $settings,
     ) {}
 
     public function handle(array $callbackQuery): void
@@ -77,7 +79,7 @@ final class CallbackQueryHandler
             CallbackActionType::Menu => $this->handleMenu($user, $action->menuItemId, $callbackId),
             CallbackActionType::JoinCheck => $this->handleJoinCheck($user, $callbackId),
             CallbackActionType::BroadcastButton => $this->handleBroadcastButton($user, $action, $callbackId),
-            CallbackActionType::InviteShow => $this->handleInviteShow($callbackId),
+            CallbackActionType::InviteShow => $this->handleInviteShow($user, $callbackId),
         };
     }
 
@@ -175,10 +177,28 @@ final class CallbackQueryHandler
         $this->client->answerCallbackQuery($callbackId);
     }
 
-    private function handleInviteShow(string $callbackId): void
+    /**
+     * Referral-lite (spec §5.6): personal ref_<user_id> deep link with
+     * per-language share text. No wallet, no rewards, no accounting.
+     */
+    private function handleInviteShow(User $user, string $callbackId): void
     {
-        // Referral-lite ships in Batch 4; until then just release the spinner.
-        Log::info('telegram.callback.invite_show_deferred');
+        $lang = $this->locale->resolve($user);
+        $features = (array) $this->settings->get('features', []);
+
+        if (! (bool) ($features['referrals'] ?? true)) {
+            $this->client->answerCallbackQuery($callbackId, $this->locale->uiText('option_unavailable', $lang));
+
+            return;
+        }
+
+        $botUsername = (string) config('telegram.bot_username');
+        $link = 'https://t.me/'.$botUsername.'?start=ref_'.$user->id;
+
         $this->client->answerCallbackQuery($callbackId);
+        $this->sender->sendToUser(
+            $user,
+            str_replace(':link', $link, $this->locale->uiText('invite_text', $lang)),
+        );
     }
 }

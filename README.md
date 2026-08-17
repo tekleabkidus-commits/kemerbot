@@ -1,59 +1,77 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# KemerBot — SunBet Telegram Bot Management System
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A standalone Laravel 12 application containing the official **SunBet** Telegram bot
+(webhook mode, EN/AM bilingual), a **Filament v4 admin panel** for the marketing team,
+and a **queue-based sending engine** safe at 100,000+ users.
 
-## About Laravel
+Spec: `docs/KEMERBOT-SPEC.md` (authoritative) · Standing rules: `CLAUDE.md` ·
+Runbook: `docs/OPERATIONS.md` · Build log: `docs/PROGRESS.md`
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## Stack
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Laravel 12 · PHP 8.4 · PostgreSQL · Redis · Filament v4 · Pest.
+Deployed on Laravel Cloud (Serverless Postgres + Valkey).
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Local development
 
-## Learning Laravel
+```bash
+composer install
+cp .env.example .env && php artisan key:generate
+docker compose up -d                  # Postgres :5445, Redis :6381 (test DB auto-created)
+php artisan migrate:fresh --seed      # owner login: owner@sunbet.et / password (change via SEED_ADMIN_*)
+php artisan serve                     # panel at http://localhost:8000/admin
+php artisan queue:work redis --queue=telegram-interactive,telegram-broadcast,automation,default
+php artisan schedule:work             # scheduler (broadcasts, automations, retention)
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+Tests (never call real Telegram — a full fake is bound in tests):
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+```bash
+./vendor/bin/pest
+```
 
-## Laravel Sponsors
+## Telegram & channel setup (spec §17)
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+1. **BotFather**: create the bot, grab the token, set name/photo/description.
+2. **Env**: set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` (no @), and a random
+   `TELEGRAM_WEBHOOK_SECRET`. Secrets live in env only — never in the DB or panel.
+3. **Channel**: add the bot as an **admin** of the SunBet channel (required for reliable
+   `getChatMember` membership checks), then put the channel ID + URL into
+   Administration → Settings.
+4. **Webhook**: `php artisan telegram:set-webhook` (uses `APP_URL`; pass a tunnel URL in
+   dev, e.g. `cloudflared tunnel --url http://localhost:8000` then
+   `php artisan telegram:set-webhook https://<tunnel-host>`). The command registers the
+   secret token and the `allowed_updates` list (message, callback_query, poll,
+   poll_answer, my_chat_member) and prints `getWebhookInfo`.
 
-### Premium Partners
+## Architecture in one paragraph
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+All Telegram HTTP flows through one `TelegramClient`; every send passes a global Redis
+token bucket (25 msg/s default, env ceiling, DB-tunable below it). The webhook verifies
+its secret, dedupes by `update_id`, and enqueues onto `telegram-interactive` — interactive
+traffic never waits behind a broadcast. Broadcasts freeze their audience into a Redis
+snapshot and self-chaining chunk jobs consume it with atomic LPOPs (one counter UPDATE
+per chunk; failures-only per-user rows). One automation engine (trigger → steps → wait →
+send) powers welcome drips and re-engagement with per-row compare-and-swap claims;
+recurring broadcasts are template rows materialized by the shared scheduler. Everything
+user-facing resolves EN/AM through one `BotLocaleResolver`. All timestamps are stored
+UTC and displayed/scheduled in Africa/Addis_Ababa.
 
-## Contributing
+## Queues & scheduler (production)
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+| Worker | Queues |
+|---|---|
+| interactive (≥1) | `telegram-interactive` — /start replies, menus, callbacks, 1:1 |
+| broadcast (1) | `telegram-broadcast` — snapshot prepare + chunk chain |
+| automation (≥1) | `automation` — drip/re-engagement step sends |
+| default (1) | `default` |
 
-## Code of Conduct
+Cron: `* * * * * php artisan schedule:run` — drives `broadcasts:process-due` and
+`automations:run` (every minute), `broadcasts:sweep-orphans` (hourly), and the
+`telegram_messages` 90-day prune (daily).
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+## Roles
 
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+**Owner** — everything · **Marketer** — content, broadcasts, automations, audience,
+polls, tracking links (no admin management, no infrastructure settings) · **Viewer** —
+read-only. Enforced server-side with policies; every admin mutation is audited.

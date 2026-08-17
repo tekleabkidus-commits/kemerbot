@@ -62,6 +62,7 @@ final class MenuRenderer
         return match ($item->action_type) {
             MenuActionType::Url => ['text' => $label, 'url' => (string) $item->url],
             MenuActionType::Webapp => ['text' => $label, 'web_app' => ['url' => (string) $item->url]],
+            MenuActionType::Invite => ['text' => $label, 'callback_data' => 'invite:show'],
             MenuActionType::Reply,
             MenuActionType::Submenu => ['text' => $label, 'callback_data' => 'menu:'.$item->id],
         };

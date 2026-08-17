@@ -28,6 +28,9 @@ class TelegramWebhookController extends Controller
             return response()->json(['ok' => true]);
         }
 
+        // Health surface (spec §13): marketers see "last webhook OK" not stack traces.
+        Redis::set('telegram:last_webhook_ok_at', now()->toIso8601String());
+
         if (! $this->firstTimeSeen($updateId)) {
             return response()->json(['ok' => true]);
         }
