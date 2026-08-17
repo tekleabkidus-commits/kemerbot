@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: kemerbot-postgres
+    environment:
+      POSTGRES_DB: kemerbot
+      POSTGRES_USER: kemerbot
+      POSTGRES_PASSWORD: kemerbot
+    ports:
+      # 5432/6379 are taken by other local projects on this machine
+      - "127.0.0.1:5445:5432"
+    volumes:
+      - kemerbot-pgdata:/var/lib/postgresql/data
+      # Creates the extra test database on first boot
+      - ./docker/postgres/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kemerbot -d kemerbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: kemerbot-redis
+    ports:
+      - "127.0.0.1:6381:6379"
+    volumes:
+      - kemerbot-redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  kemerbot-pgdata:
+  kemerbot-redisdata:
