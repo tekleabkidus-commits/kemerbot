@@ -17,9 +17,11 @@ class TopReferrers extends TableWidget
         return $table
             ->heading('Top referrers')
             ->query(
+                // whereHas, not HAVING on the alias — Postgres rejects
+                // select-list aliases in HAVING (42703).
                 User::query()
                     ->withCount('referrals')
-                    ->having('referrals_count', '>', 0)
+                    ->whereHas('referrals')
                     ->orderByDesc('referrals_count')
                     ->limit(10),
             )
