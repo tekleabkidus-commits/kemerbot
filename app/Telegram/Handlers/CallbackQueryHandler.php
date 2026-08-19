@@ -126,8 +126,10 @@ final class CallbackQueryHandler
                     ?? $this->locale->uiText('menu_prompt', $lang),
                 replyMarkup: $this->menus->submenuKeyboard($item, $lang),
             ),
-            // URL/Web App actions are buttons, not callbacks — a callback here is stale/hostile.
-            MenuActionType::Url, MenuActionType::Webapp => null,
+            // URL/Web App/Invite actions render as their own button kinds, not
+            // menu: callbacks — a menu: callback here is stale/hostile. Ignore
+            // (the spinner was already answered above).
+            MenuActionType::Url, MenuActionType::Webapp, MenuActionType::Invite => null,
         };
     }
 

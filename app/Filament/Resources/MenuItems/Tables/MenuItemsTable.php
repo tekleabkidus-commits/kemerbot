@@ -36,6 +36,7 @@ class MenuItemsTable
                         MenuActionType::Submenu => 'info',
                         MenuActionType::Url => 'warning',
                         MenuActionType::Webapp => 'primary',
+                        MenuActionType::Invite => 'gray',
                     }),
                 TextColumn::make('children_count')
                     ->label('Children')
