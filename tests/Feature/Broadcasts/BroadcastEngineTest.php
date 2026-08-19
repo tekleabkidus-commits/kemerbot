@@ -295,3 +295,123 @@ it('cleans up redis keys on terminal states', function () {
 
     expect(app(AudienceSnapshot::class)->remaining($broadcast->id))->toBe(0);
 });
+
+it('never loses recipients claimed by a crashed worker — the HARDENING §3 scenario', function () {
+    Queue::fake();
+    config()->set('telegram.broadcast_chunk_size', 3);
+    config()->set('telegram.broadcast_claim_timeout_seconds', 0); // stale immediately
+    User::factory()->count(6)->create();
+    $broadcast = makeBroadcast();
+
+    app(BroadcastLifecycle::class)->start($broadcast);
+    (new PrepareBroadcastJob($broadcast->id))->handle(app(BroadcastLifecycle::class));
+
+    $snapshot = app(AudienceSnapshot::class);
+
+    // "worker claims 1,2,3 … worker crashes before sending them":
+    // a dead consumer reads three entries and never acknowledges anything.
+    $claimed = $snapshot->claimBatch($broadcast->id, 'dead-worker', 3);
+    expect($claimed)->toHaveCount(3);
+
+    // A fresh worker takes over: the pending entries are reclaimed, then the
+    // unread remainder — users 1–3 are NOT permanently skipped.
+    runChunksUntilDone($broadcast);
+
+    $broadcast->refresh();
+
+    expect($broadcast->status)->toBe(BroadcastStatus::Completed)
+        ->and($broadcast->sent)->toBe(6)
+        ->and($broadcast->sent + $broadcast->blocked + $broadcast->failed)->toBe($broadcast->queued);
+});
+
+it('cannot appear complete while another worker still holds claimed recipients', function () {
+    Queue::fake();
+    config()->set('telegram.broadcast_claim_timeout_seconds', 300); // claims are fresh
+    User::factory()->count(2)->create();
+    $broadcast = makeBroadcast();
+
+    app(BroadcastLifecycle::class)->start($broadcast);
+    (new PrepareBroadcastJob($broadcast->id))->handle(app(BroadcastLifecycle::class));
+
+    // A live consumer holds both entries, unacknowledged.
+    app(AudienceSnapshot::class)->claimBatch($broadcast->id, 'busy-worker', 2);
+
+    // Another chunk job finds nothing claimable — and must NOT complete.
+    (new SendBroadcastChunkJob($broadcast->id))->handle(
+        app(AudienceSnapshot::class),
+        app(BroadcastChunkSender::class),
+        app(BroadcastLifecycle::class),
+    );
+
+    expect($broadcast->refresh()->status)->toBe(BroadcastStatus::Sending);
+});
+
+it('acknowledges reclaimed duplicates without re-sending or double-counting', function () {
+    Queue::fake();
+    config()->set('telegram.broadcast_claim_timeout_seconds', 0);
+    $user = User::factory()->create();
+    $broadcast = makeBroadcast();
+
+    app(BroadcastLifecycle::class)->start($broadcast);
+    (new PrepareBroadcastJob($broadcast->id))->handle(app(BroadcastLifecycle::class));
+
+    $snapshot = app(AudienceSnapshot::class);
+
+    // Crash window: the message reached Telegram and bookkeeping recorded it,
+    // but the worker died before XACK — the entry stays pending.
+    $snapshot->claimBatch($broadcast->id, 'dead-worker', 1);
+    $snapshot->markDone($broadcast->id, $user->id);
+    Broadcast::query()->whereKey($broadcast->id)->update(['sent' => 1]);
+
+    runChunksUntilDone($broadcast);
+
+    $broadcast->refresh();
+
+    expect($broadcast->status)->toBe(BroadcastStatus::Completed)
+        ->and($broadcast->sent)->toBe(1) // not double-counted
+        ->and(fakeTelegram()->sentTo($user->tg_chat_id))->toHaveCount(0); // not re-sent
+});
+
+it('hands two concurrent workers disjoint recipient batches', function () {
+    Queue::fake();
+    config()->set('telegram.broadcast_claim_timeout_seconds', 300);
+    User::factory()->count(6)->create();
+    $broadcast = makeBroadcast();
+
+    app(BroadcastLifecycle::class)->start($broadcast);
+    (new PrepareBroadcastJob($broadcast->id))->handle(app(BroadcastLifecycle::class));
+
+    $snapshot = app(AudienceSnapshot::class);
+    $batchA = $snapshot->claimBatch($broadcast->id, 'worker-a', 3);
+    $batchB = $snapshot->claimBatch($broadcast->id, 'worker-b', 3);
+
+    $idsA = array_column($batchA, 'user_id');
+    $idsB = array_column($batchB, 'user_id');
+
+    expect($batchA)->toHaveCount(3)
+        ->and($batchB)->toHaveCount(3)
+        ->and(array_intersect($idsA, $idsB))->toBe([]);
+});
+
+it('revives a stalled sending broadcast via the recovery command', function () {
+    Queue::fake();
+    config()->set('telegram.broadcast_claim_timeout_seconds', 0);
+    User::factory()->count(2)->create();
+    $broadcast = makeBroadcast();
+
+    app(BroadcastLifecycle::class)->start($broadcast);
+    (new PrepareBroadcastJob($broadcast->id))->handle(app(BroadcastLifecycle::class));
+
+    // The whole chain died: no chunk job will ever run again on its own.
+    Broadcast::query()->whereKey($broadcast->id)
+        ->update(['updated_at' => now()->subMinutes(10)]);
+
+    $this->artisan('broadcasts:recover-stalled')->assertSuccessful();
+    Queue::assertPushed(SendBroadcastChunkJob::class);
+
+    // Driving the revived chain finishes the campaign.
+    runChunksUntilDone($broadcast);
+
+    expect($broadcast->refresh()->status)->toBe(BroadcastStatus::Completed)
+        ->and($broadcast->sent)->toBe(2);
+});

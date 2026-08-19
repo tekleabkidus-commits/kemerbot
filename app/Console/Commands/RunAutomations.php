@@ -18,8 +18,9 @@ class RunAutomations extends Command
     {
         $enrolled = $enroller->enrollInactive();
         $dispatched = $runner->runDue();
+        $recovered = $runner->recoverStalled();
 
-        $this->info("Inactive enrollments: {$enrolled}, steps dispatched: {$dispatched}");
+        $this->info("Inactive enrollments: {$enrolled}, steps dispatched: {$dispatched}, deliveries recovered: {$recovered}");
 
         return self::SUCCESS;
     }

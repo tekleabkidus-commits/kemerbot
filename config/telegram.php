@@ -79,4 +79,19 @@ return [
     // Orphaned broadcast audience snapshot keys older than this are swept.
     'snapshot_orphan_hours' => (int) env('TELEGRAM_SNAPSHOT_ORPHAN_HOURS', 48),
 
+    // A recipient claimed by a worker (stream pending entry) longer than this
+    // is considered abandoned and reclaimed by another worker.
+    'broadcast_claim_timeout_seconds' => (int) env('TELEGRAM_BROADCAST_CLAIM_TIMEOUT', 300),
+
+    // A `sending` broadcast with no counter progress for this long gets its
+    // chunk chain re-dispatched by broadcasts:recover-stalled.
+    'broadcast_stall_seconds' => (int) env('TELEGRAM_BROADCAST_STALL_SECONDS', 120),
+
+    // Automation outbox recovery: re-dispatch queued deliveries idle longer
+    // than this; reset `sending` deliveries idle longer than 2x this.
+    'automation_delivery_stall_seconds' => (int) env('TELEGRAM_AUTOMATION_STALL_SECONDS', 300),
+
+    // Per-instance previous poll counts (delta computation) live this long.
+    'poll_prev_ttl_days' => (int) env('TELEGRAM_POLL_PREV_TTL_DAYS', 30),
+
 ];

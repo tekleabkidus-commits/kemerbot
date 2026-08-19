@@ -57,6 +57,7 @@ class Broadcast extends Model
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'occurrence_at' => 'datetime',
         ];
     }
 
@@ -93,5 +94,15 @@ class Broadcast extends Model
     public function isRecurring(): bool
     {
         return $this->recurrence !== null;
+    }
+
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(Broadcast::class, 'parent_broadcast_id');
+    }
+
+    public function occurrences(): HasMany
+    {
+        return $this->hasMany(Broadcast::class, 'parent_broadcast_id');
     }
 }

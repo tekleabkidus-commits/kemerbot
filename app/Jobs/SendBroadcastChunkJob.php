@@ -13,11 +13,13 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
 /**
- * Self-chaining chunk worker (spec §7): claim a chunk via atomic LPOP, send
- * it, apply one counter UPDATE, dispatch the next link. Checks the
- * cancellation flag every chunk; a worker death loses at most one chunk of
- * counter updates (documented residual edge, spec §7) and the next dispatch
- * simply consumes what remains in Redis.
+ * Self-chaining batch worker (spec §7, HARDENING §3). Claims a batch from the
+ * audience stream's consumer group — reclaiming entries abandoned by dead
+ * workers first — sends it, applies one counter UPDATE, and dispatches the
+ * next link. Entries are acknowledged per recipient AFTER their outcome is
+ * recorded, so a crash mid-batch leaves the unfinished entries in the pending
+ * list to be reclaimed: recipients are never lost. The broadcast completes
+ * only when the stream holds no unread and no pending entries.
  */
 class SendBroadcastChunkJob implements ShouldQueue
 {
@@ -50,16 +52,33 @@ class SendBroadcastChunkJob implements ShouldQueue
             return;
         }
 
-        $chunk = $snapshot->popChunk($broadcast->id, (int) config('telegram.broadcast_chunk_size'));
+        $entries = $snapshot->claimBatch(
+            $broadcast->id,
+            $this->consumerName(),
+            (int) config('telegram.broadcast_chunk_size'),
+        );
 
-        if ($chunk === []) {
-            $lifecycle->complete($broadcast);
+        if ($entries === []) {
+            // Complete ONLY when nothing is outstanding (unread + pending).
+            // Entries claimed by another live worker keep the stream non-empty,
+            // so a crashed worker can never make the campaign look finished.
+            if ($snapshot->outstanding($broadcast->id) === 0) {
+                $lifecycle->complete($broadcast);
+            }
 
+            // Outstanding entries belong to another consumer or are inside the
+            // claim-timeout window; broadcasts:recover-stalled re-dispatches
+            // the chain if that consumer never finishes.
             return;
         }
 
-        $sender->sendChunk($broadcast, $chunk);
+        $sender->sendChunk($broadcast, $entries);
 
         self::dispatch($this->broadcastId)->onQueue(config('telegram.queues.broadcast'));
+    }
+
+    private function consumerName(): string
+    {
+        return gethostname().':'.getmypid();
     }
 }

@@ -119,6 +119,7 @@ final class BroadcastLifecycle
                 'status', 'audience_snapshot_count', 'scheduled_at', 'recurrence',
                 'queued', 'sent', 'blocked', 'failed',
                 'started_at', 'finished_at', 'cancelled_at',
+                'parent_broadcast_id', 'occurrence_at',
             ]);
             $copy->status = BroadcastStatus::Draft;
             $copy->created_by = auth()->id() ?? $broadcast->created_by;

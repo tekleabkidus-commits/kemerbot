@@ -13,6 +13,7 @@ use App\Services\Broadcasts\BroadcastScheduler;
 use App\Services\Broadcasts\InvalidBroadcastTransition;
 use App\Services\Broadcasts\NextOccurrenceCalculator;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 
 afterEach(fn () => Carbon::setTestNow());
@@ -109,4 +110,71 @@ it('unschedules back to draft', function () {
 
     expect($broadcast->refresh()->status)->toBe(BroadcastStatus::Draft)
         ->and($broadcast->scheduled_at)->toBeNull();
+});
+
+it('materializes exactly one child when two schedulers race — HARDENING §6', function () {
+    Carbon::setTestNow('2026-08-17 12:00:00');
+    User::factory()->create();
+
+    $parent = Broadcast::factory()->create([
+        'status' => 'scheduled',
+        'scheduled_at' => now()->subMinute(),
+        'recurrence' => ['frequency' => 'daily', 'time' => '09:00'],
+    ]);
+    BroadcastTranslation::factory()->for($parent)->create();
+
+    // Scheduler A wins the row lock and materializes.
+    $first = app(BroadcastScheduler::class)->processDue();
+
+    // Scheduler B held a STALE due-list including the same parent; its pass
+    // re-verifies under the lock and finds the parent no longer due.
+    $second = app(BroadcastScheduler::class)->processDue();
+
+    expect($first['materialized'])->toBe(1)
+        ->and($second['materialized'])->toBe(0)
+        ->and(Broadcast::query()->where('parent_broadcast_id', $parent->id)->count())->toBe(1);
+});
+
+it('enforces occurrence uniqueness at the database level', function () {
+    $parent = Broadcast::factory()->recurring()->create();
+    $occurrenceAt = now()->startOfMinute();
+
+    Broadcast::factory()->create([
+        'parent_broadcast_id' => $parent->id,
+        'occurrence_at' => $occurrenceAt,
+    ]);
+
+    // Even if every application lock failed, the unique index is the final
+    // defense against a duplicated occurrence.
+    expect(fn () => Broadcast::factory()->create([
+        'parent_broadcast_id' => $parent->id,
+        'occurrence_at' => $occurrenceAt,
+    ]))->toThrow(QueryException::class);
+});
+
+it('recovers from a crash between child creation and parent advancement without duplicating', function () {
+    Carbon::setTestNow('2026-08-17 12:00:00');
+    User::factory()->create();
+
+    $parent = Broadcast::factory()->create([
+        'status' => 'scheduled',
+        'scheduled_at' => now()->subMinute(),
+        'recurrence' => ['frequency' => 'daily', 'time' => '09:00'],
+    ]);
+    BroadcastTranslation::factory()->for($parent)->create();
+
+    // Crash artifact: the child for THIS occurrence already exists but the
+    // parent was never advanced (still due).
+    Broadcast::factory()->create([
+        'status' => 'completed',
+        'parent_broadcast_id' => $parent->id,
+        'occurrence_at' => $parent->scheduled_at,
+    ]);
+
+    $result = app(BroadcastScheduler::class)->processDue();
+
+    // No second child; the parent is re-armed for the next occurrence.
+    expect($result['materialized'])->toBe(0)
+        ->and(Broadcast::query()->where('parent_broadcast_id', $parent->id)->count())->toBe(1)
+        ->and($parent->refresh()->scheduled_at->isFuture())->toBeTrue();
 });

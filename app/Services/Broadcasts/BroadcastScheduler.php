@@ -6,13 +6,21 @@ namespace App\Services\Broadcasts;
 
 use App\Enums\BroadcastStatus;
 use App\Models\Broadcast;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
  * Runs every minute from the Laravel scheduler (spec §7): promotes due
  * one-off scheduled broadcasts, and for recurring definitions materializes a
- * one-off child occurrence and advances the parent to its next slot
- * (spec §4.3 — recurring campaigns never touch the automation engine).
+ * one-off child occurrence and advances the parent (spec §4.3).
+ *
+ * HARDENING §6 concurrency: one-off promotion was always race-safe (the
+ * atomic status claim in BroadcastLifecycle::start). Recurring
+ * materialization now runs inside a transaction with the parent row locked
+ * (SELECT ... FOR UPDATE) and a due re-check, and each occurrence is
+ * identified by (parent_broadcast_id, occurrence_at) under a unique index —
+ * database-level idempotency even if application locking ever fails.
  */
 final class BroadcastScheduler
 {
@@ -36,8 +44,9 @@ final class BroadcastScheduler
         foreach ($due as $broadcast) {
             try {
                 if ($broadcast->isRecurring()) {
-                    $this->materializeOccurrence($broadcast);
-                    $materialized++;
+                    if ($this->materializeOccurrence($broadcast) !== null) {
+                        $materialized++;
+                    }
                 } else {
                     $this->lifecycle->start($broadcast);
                     $started++;
@@ -55,23 +64,75 @@ final class BroadcastScheduler
     }
 
     /**
-     * The recurring row acts as a template: each due tick clones a one-off
-     * child (stats live on the child) and re-arms the parent for the next
-     * occurrence in Addis time.
+     * Atomically clone one occurrence from a recurring template parent.
+     * Returns null when a concurrent scheduler already handled it.
      */
-    private function materializeOccurrence(Broadcast $parent): void
+    private function materializeOccurrence(Broadcast $parent): ?Broadcast
     {
-        $child = $this->lifecycle->duplicate($parent);
+        try {
+            $child = DB::transaction(function () use ($parent): ?Broadcast {
+                /** @var Broadcast|null $locked */
+                $locked = Broadcast::query()->whereKey($parent->id)->lockForUpdate()->first();
 
-        $next = $this->nextOccurrence->next($parent->recurrence, now());
-        $parent->forceFill(['scheduled_at' => $next])->save();
+                // Re-verify under the lock: a concurrent scheduler may have
+                // advanced the parent between our read and this lock.
+                if ($locked === null
+                    || ! $locked->isRecurring()
+                    || $locked->status !== BroadcastStatus::Scheduled
+                    || $locked->scheduled_at === null
+                    || $locked->scheduled_at->isFuture()) {
+                    return null;
+                }
 
+                $occurrenceAt = $locked->scheduled_at;
+
+                // Occurrence idempotency: skip if this occurrence already exists
+                // (e.g. crash between child creation and parent advancement).
+                $child = null;
+
+                if (! Broadcast::query()
+                    ->where('parent_broadcast_id', $locked->id)
+                    ->where('occurrence_at', $occurrenceAt)
+                    ->exists()) {
+                    $child = $this->lifecycle->duplicate($locked);
+                    $child->forceFill([
+                        'parent_broadcast_id' => $locked->id,
+                        'occurrence_at' => $occurrenceAt,
+                    ])->save();
+                }
+
+                $locked->forceFill([
+                    'scheduled_at' => $this->nextOccurrence->next($locked->recurrence, now()),
+                ])->save();
+
+                return $child;
+            });
+        } catch (QueryException $e) {
+            // Unique (parent, occurrence_at) violation: the DB-level defense
+            // fired — a concurrent process created this occurrence first.
+            if ((string) $e->getCode() === '23505') {
+                Log::info('broadcast.recurrence.occurrence_race_lost', ['parent_id' => $parent->id]);
+
+                return null;
+            }
+
+            throw $e;
+        }
+
+        if ($child === null) {
+            return null;
+        }
+
+        // Outside the transaction: starting is itself an atomic status claim.
         $this->lifecycle->start($child);
 
         Log::info('broadcast.recurrence.materialized', [
             'parent_id' => $parent->id,
             'child_id' => $child->id,
-            'next_occurrence_utc' => $next->toIso8601String(),
+            'occurrence_at_utc' => $child->occurrence_at?->toIso8601String(),
+            'next_occurrence_utc' => $parent->refresh()->scheduled_at?->toIso8601String(),
         ]);
+
+        return $child;
     }
 }

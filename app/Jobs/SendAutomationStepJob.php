@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Models\AutomationStep;
-use App\Models\AutomationUserState;
-use App\Models\User;
+use App\Enums\AutomationDeliveryStatus;
+use App\Models\AutomationStepDelivery;
+use App\Services\Automations\AutomationStateAdvancer;
 use App\Services\Bot\BotLocaleResolver;
 use App\Services\Bot\BotMessageSender;
 use App\Services\Bot\EmbeddedButtonsRenderer;
@@ -17,47 +17,82 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Sends one already-claimed automation step to one user on the automation
- * queue (spec §8). Respects the global rate limiter via BotMessageSender,
- * skips blocked users, and bumps the per-step sent counter (spec §5.5).
+ * Processes one automation step delivery (transactional outbox, HARDENING §4).
+ * Claims the delivery row atomically (queued → sending), sends, and only then
+ * advances the enrollment state. Retryable Telegram failures release the job
+ * for a delayed retry; permanent failures are recorded and the journey moves
+ * on (a blocked user's enrollment is cancelled) so one unreachable user never
+ * stalls an automation.
  */
 class SendAutomationStepJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 3;
+    public int $tries = 5;
 
     /** @var list<int> */
-    public array $backoff = [10, 60];
+    public array $backoff = [10, 30, 60, 120];
 
-    public function __construct(
-        public readonly int $stateId,
-        public readonly int $stepId,
-        public readonly int $userId,
-    ) {}
+    public function __construct(public readonly int $deliveryId) {}
 
     public function handle(
         BotLocaleResolver $locale,
         TokenRenderer $tokens,
         EmbeddedButtonsRenderer $buttons,
         BotMessageSender $sender,
+        AutomationStateAdvancer $advancer,
     ): void {
-        $state = AutomationUserState::query()->with('automation')->find($this->stateId);
-        $step = AutomationStep::query()->with(['translations', 'mediaFile'])->find($this->stepId);
-        $user = User::query()->find($this->userId);
+        $delivery = AutomationStepDelivery::query()
+            ->with(['state.automation.steps', 'step.translations', 'step.mediaFile', 'user'])
+            ->find($this->deliveryId);
 
-        if ($state === null || $step === null || $user === null) {
+        if ($delivery === null || $delivery->state === null) {
             return;
         }
 
-        // Paused between claim and execution (spec §4.10: paused sends nothing).
-        if (! $state->automation->is_active) {
-            Log::info('automation.step_skipped_paused', ['state_id' => $state->id, 'step_id' => $step->id]);
+        // Paused between claim and execution: put the delivery back so
+        // recovery re-dispatches it after resume. Nothing sends while paused
+        // (spec §4.10) and nothing is lost.
+        if (! $delivery->state->automation->is_active) {
+            AutomationStepDelivery::query()
+                ->whereKey($delivery->id)
+                ->whereIn('status', [AutomationDeliveryStatus::Queued->value, AutomationDeliveryStatus::Sending->value])
+                ->update(['status' => AutomationDeliveryStatus::Queued->value]);
+
+            return;
+        }
+
+        // Atomic claim: only one worker may move queued → sending.
+        $claimed = AutomationStepDelivery::query()
+            ->whereKey($delivery->id)
+            ->where('status', AutomationDeliveryStatus::Queued->value)
+            ->update([
+                'status' => AutomationDeliveryStatus::Sending->value,
+                'attempt_count' => DB::raw('attempt_count + 1'),
+                'updated_at' => now(),
+            ]);
+
+        if ($claimed === 0) {
+            // Another worker owns it, or it already finished — re-dispatch no-op.
+            return;
+        }
+
+        $delivery->refresh();
+
+        $step = $delivery->step;
+        $user = $delivery->user;
+
+        if ($step === null || $user === null) {
+            $this->failDelivery($delivery, 'step or user no longer exists');
+            $advancer->advancePast($delivery->state, $delivery->state->current_step_no);
 
             return;
         }
 
         if ($user->blocked_bot) {
+            $this->failDelivery($delivery, 'user has blocked the bot');
+            $advancer->cancel($delivery->state);
+
             return;
         }
 
@@ -66,6 +101,8 @@ class SendAutomationStepJob implements ShouldQueue
 
         if ($translation === null && $step->media_file_id === null) {
             Log::warning('automation.step_has_no_content', ['step_id' => $step->id]);
+            $this->failDelivery($delivery, 'step has no content');
+            $advancer->advancePast($delivery->state, $step->step_no);
 
             return;
         }
@@ -75,9 +112,75 @@ class SendAutomationStepJob implements ShouldQueue
         $response = $sender->sendToUser($user, $text, $step->mediaFile, $buttons->render($step->buttons, $lang));
 
         if ($response->successful()) {
-            AutomationStep::query()->whereKey($step->id)->update([
-                'sent_count' => DB::raw('sent_count + 1'),
-            ]);
+            $step->newQuery()->whereKey($step->id)->update(['sent_count' => DB::raw('sent_count + 1')]);
+
+            $delivery->forceFill([
+                'status' => AutomationDeliveryStatus::Sent,
+                'sent_at' => now(),
+            ])->save();
+
+            // Only NOW does the enrollment move forward (HARDENING §4).
+            $advancer->advancePast($delivery->state, $step->step_no);
+
+            return;
         }
+
+        if ($response->blockedByUser()) {
+            $this->failDelivery($delivery, 'blocked: '.(string) $response->description);
+            $advancer->cancel($delivery->state);
+
+            return;
+        }
+
+        if ($response->retryable() && $delivery->attempt_count < $this->tries) {
+            // Put the row back to queued and release the JOB for a delayed
+            // retry — Laravel's backoff drives the schedule; the delivery row
+            // stays durable in case the worker dies while waiting.
+            $delivery->forceFill(['status' => AutomationDeliveryStatus::Queued])->save();
+
+            $this->release($this->backoff[min($delivery->attempt_count, count($this->backoff)) - 1] ?? 60);
+
+            return;
+        }
+
+        // Permanent (or retry-exhausted): record and move on — never stall
+        // the journey on one failed message.
+        $this->failDelivery($delivery, ($response->errorCode ?? 'network').': '.(string) $response->description);
+        $advancer->advancePast($delivery->state, $step->step_no);
+    }
+
+    public function failed(): void
+    {
+        $delivery = AutomationStepDelivery::query()->with('state.automation.steps')->find($this->deliveryId);
+
+        if ($delivery === null || in_array($delivery->status, [AutomationDeliveryStatus::Sent, AutomationDeliveryStatus::Failed], true)) {
+            return;
+        }
+
+        $delivery->forceFill([
+            'status' => AutomationDeliveryStatus::Failed,
+            'failed_at' => now(),
+            'last_error' => 'job exhausted retries',
+        ])->save();
+
+        if ($delivery->state !== null) {
+            app(AutomationStateAdvancer::class)->advancePast($delivery->state, $delivery->state->current_step_no);
+        }
+    }
+
+    private function failDelivery(AutomationStepDelivery $delivery, string $reason): void
+    {
+        $delivery->forceFill([
+            'status' => AutomationDeliveryStatus::Failed,
+            'failed_at' => now(),
+            'last_error' => mb_substr($reason, 0, 490),
+        ])->save();
+
+        Log::info('automation.delivery_failed', [
+            'delivery_id' => $delivery->id,
+            'automation_step_id' => $delivery->automation_step_id,
+            'user_id' => $delivery->user_id,
+            'reason' => mb_substr($reason, 0, 200),
+        ]);
     }
 }

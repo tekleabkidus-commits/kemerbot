@@ -5,10 +5,12 @@ declare(strict_types=1);
 use App\Models\Poll;
 use App\Models\PollInstance;
 use App\Models\User;
+use App\Services\Bot\PollService;
 use App\Services\Broadcasts\BroadcastLifecycle;
 use App\Services\Broadcasts\BroadcastTestSender;
 use App\Services\SettingsService;
 use Database\Seeders\SettingsSeeder;
+use Illuminate\Support\Facades\Redis;
 
 beforeEach(function () {
     $this->seed(SettingsSeeder::class);
@@ -113,4 +115,76 @@ it('test-sends polls without creating instances', function () {
     expect($result['sent'])->toBe(1)
         ->and(fakeTelegram()->callsTo('sendPoll')[0]['params']['question'])->toStartWith('[TEST]')
         ->and(PollInstance::query()->count())->toBe(0);
+});
+
+it('processes an update touching only its own instance state — O(options), not O(recipients)', function () {
+    $poll = Poll::factory()->create();
+    $service = app(PollService::class);
+
+    // 300 sibling instances, each with its own previous-counts key.
+    $instances = PollInstance::factory()->for($poll)->count(300)->create();
+
+    foreach ($instances as $i => $instance) {
+        $service->seedPreviousCounts($instance->tg_poll_id, [1, 0]);
+    }
+    $poll->update(['answer_counts' => ['0' => 300, '1' => 0]]);
+
+    // One voter on ONE instance changes their vote.
+    $target = $instances->first();
+    postWebhook([
+        'update_id' => 710001,
+        'poll' => ['id' => $target->tg_poll_id, 'options' => [
+            ['text' => 'A', 'voter_count' => 0], ['text' => 'B', 'voter_count' => 1],
+        ]],
+    ]);
+
+    // Totals moved by exactly the delta — computed WITHOUT reading the other
+    // 299 instances (their prev keys are untouched).
+    expect($poll->refresh()->answer_counts)->toEqual(['0' => 299, '1' => 1])
+        ->and(Redis::get('poll:prev:'.$instances[5]->tg_poll_id))->toBe('[1,0]')
+        ->and(Redis::get('poll:prev:'.$target->tg_poll_id))->toBe('[0,1]');
+});
+
+it('keeps per-instance previous counts under a TTL', function () {
+    $poll = Poll::factory()->create();
+    $instance = PollInstance::factory()->for($poll)->create(['tg_poll_id' => 'ttl-check']);
+
+    postWebhook([
+        'update_id' => 710002,
+        'poll' => ['id' => 'ttl-check', 'options' => [['text' => 'A', 'voter_count' => 1]]],
+    ]);
+
+    $ttl = (int) Redis::ttl('poll:prev:ttl-check');
+
+    expect($ttl)->toBeGreaterThan(0)
+        ->and($ttl)->toBeLessThanOrEqual(30 * 86400);
+});
+
+it('migrates legacy aggregation state so historical votes are never double-counted', function () {
+    $poll = Poll::factory()->create(['answer_counts' => ['0' => 3, '1' => 1]]);
+    PollInstance::factory()->for($poll)->create(['tg_poll_id' => 'legacy-1']);
+    Redis::hset("poll:{$poll->id}:counts", 'legacy-1', json_encode([3, 1]));
+
+    $this->artisan('polls:migrate-aggregation-state')->assertSuccessful();
+
+    // Legacy hash gone; the SAME counts arriving again produce zero delta.
+    postWebhook([
+        'update_id' => 710003,
+        'poll' => ['id' => 'legacy-1', 'options' => [
+            ['text' => 'A', 'voter_count' => 3], ['text' => 'B', 'voter_count' => 1],
+        ]],
+    ]);
+
+    expect((array) Redis::hgetall("poll:{$poll->id}:counts"))->toBe([])
+        ->and($poll->refresh()->answer_counts)->toEqual(['0' => 3, '1' => 1]);
+
+    // And a real new vote still lands as a delta.
+    postWebhook([
+        'update_id' => 710004,
+        'poll' => ['id' => 'legacy-1', 'options' => [
+            ['text' => 'A', 'voter_count' => 4], ['text' => 'B', 'voter_count' => 1],
+        ]],
+    ]);
+
+    expect($poll->refresh()->answer_counts)->toEqual(['0' => 4, '1' => 1]);
 });

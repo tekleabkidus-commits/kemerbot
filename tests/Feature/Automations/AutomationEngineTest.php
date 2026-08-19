@@ -2,20 +2,24 @@
 
 declare(strict_types=1);
 
+use App\Enums\AutomationDeliveryStatus;
 use App\Enums\AutomationUserStatus;
 use App\Jobs\SendAutomationStepJob;
 use App\Models\Automation;
 use App\Models\AutomationStep;
+use App\Models\AutomationStepDelivery;
 use App\Models\AutomationStepTranslation;
 use App\Models\AutomationUserState;
 use App\Models\User;
 use App\Services\Automations\AutomationEnroller;
 use App\Services\Automations\AutomationRunner;
+use App\Services\Automations\AutomationStateAdvancer;
 use App\Services\Bot\BotLocaleResolver;
 use App\Services\Bot\BotMessageSender;
 use App\Services\Bot\EmbeddedButtonsRenderer;
 use App\Services\Bot\TokenRenderer;
 use Database\Seeders\SettingsSeeder;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 
@@ -93,7 +97,7 @@ it('sends the due step and schedules the next one relative to it', function () {
         ->and($automation->steps->firstWhere('step_no', 0)->refresh()->sent_count)->toBe(1);
 });
 
-it('proves the claim is atomic: a stale concurrent tick can never double-send', function () {
+it('proves the claim is atomic: concurrent ticks cannot double-dispatch a step', function () {
     Queue::fake();
     $automation = dripAutomation([1]);
     $state = AutomationUserState::factory()->create([
@@ -103,29 +107,128 @@ it('proves the claim is atomic: a stale concurrent tick can never double-send', 
         'next_step_at' => now()->subMinute(),
     ]);
 
-    // Tick B reads the due row FIRST — this is exactly what a racing
-    // scheduler process would hold in memory.
-    $staleCurrentStep = $state->current_step_no;
-    $staleNextStepAt = $state->next_step_at;
-
-    // Tick A wins: claims and dispatches.
+    // Tick A claims: one delivery row, state parked out of the due set.
     app(AutomationRunner::class)->runDue();
     Queue::assertPushed(SendAutomationStepJob::class, 1);
 
-    // Tick B replays the IDENTICAL guarded UPDATE with its stale snapshot —
-    // the compare-and-swap matches zero rows, so it dispatches nothing.
-    $claimedByB = AutomationUserState::query()
-        ->whereKey($state->id)
-        ->where('status', AutomationUserStatus::Active->value)
-        ->where('current_step_no', $staleCurrentStep)
-        ->where('next_step_at', $staleNextStepAt)
-        ->update(['last_step_sent_at' => now()]);
+    expect(AutomationStepDelivery::query()->count())->toBe(1)
+        ->and($state->refresh()->next_step_at)->toBeNull();
 
-    expect($claimedByB)->toBe(0);
-
-    // And a full second scheduler pass also finds nothing due.
+    // Tick B (a racing scheduler) finds nothing due…
     app(AutomationRunner::class)->runDue();
     Queue::assertPushed(SendAutomationStepJob::class, 1);
+
+    // …and even a raw replay of the claim hits the DB-level defense:
+    // unique(automation_user_state_id, automation_step_id).
+    expect(fn () => AutomationStepDelivery::query()->create([
+        'automation_user_state_id' => $state->id,
+        'automation_step_id' => $automation->steps->first()->id,
+        'user_id' => $state->user_id,
+        'status' => 'queued',
+        'queued_at' => now(),
+    ]))->toThrow(QueryException::class);
+});
+
+it('does not advance state before the message is safely processed', function () {
+    Queue::fake(); // the dispatched job is "lost" — worker never runs it
+    $automation = dripAutomation([1, 48]);
+    $state = AutomationUserState::factory()->create([
+        'automation_id' => $automation->id,
+        'user_id' => User::factory()->create()->id,
+        'current_step_no' => 0,
+        'next_step_at' => now()->subMinute(),
+    ]);
+
+    app(AutomationRunner::class)->runDue();
+
+    $state->refresh();
+
+    // Claimed and parked — but NOT advanced, and nothing sent.
+    expect($state->current_step_no)->toBe(0)
+        ->and($state->next_step_at)->toBeNull()
+        ->and(fakeTelegram()->nothingSent())->toBeTrue()
+        ->and(AutomationStepDelivery::query()->value('status'))->toBe(AutomationDeliveryStatus::Queued);
+});
+
+it('recovers a step whose job dispatch was lost — nothing is silently dropped', function () {
+    config()->set('telegram.automation_delivery_stall_seconds', 0);
+    $automation = dripAutomation([1, 48]);
+    $user = User::factory()->create();
+    // The exact crash-window state: transaction committed (delivery queued,
+    // state parked) but the process died before dispatching the job.
+    $state = AutomationUserState::factory()->create([
+        'automation_id' => $automation->id,
+        'user_id' => $user->id,
+        'current_step_no' => 0,
+        'next_step_at' => null,
+    ]);
+    $delivery = AutomationStepDelivery::factory()->create([
+        'automation_user_state_id' => $state->id,
+        'automation_step_id' => $automation->steps->first()->id,
+        'user_id' => $user->id,
+        'status' => 'queued',
+    ]);
+    AutomationStepDelivery::query()->whereKey($delivery->id)->update(['updated_at' => now()->subMinutes(10)]);
+
+    app(AutomationRunner::class)->recoverStalled();
+
+    $state->refresh();
+
+    expect(fakeTelegram()->sentTo($user->tg_chat_id))->toHaveCount(1)
+        ->and($state->current_step_no)->toBe(1)
+        ->and($delivery->refresh()->status)->toBe(AutomationDeliveryStatus::Sent);
+});
+
+it('resets and retries deliveries whose worker died mid-send', function () {
+    config()->set('telegram.automation_delivery_stall_seconds', 0);
+    $automation = dripAutomation([1]);
+    $user = User::factory()->create();
+    $state = AutomationUserState::factory()->create([
+        'automation_id' => $automation->id,
+        'user_id' => $user->id,
+        'current_step_no' => 0,
+        'next_step_at' => null, // already claimed
+    ]);
+    $delivery = AutomationStepDelivery::factory()->create([
+        'automation_user_state_id' => $state->id,
+        'automation_step_id' => $automation->steps->first()->id,
+        'user_id' => $user->id,
+        'status' => 'sending', // worker died holding it
+    ]);
+    AutomationStepDelivery::query()->whereKey($delivery->id)->update(['updated_at' => now()->subHour()]);
+
+    app(AutomationRunner::class)->recoverStalled();
+
+    expect(fakeTelegram()->sentTo($user->tg_chat_id))->toHaveCount(1)
+        ->and(AutomationStepDelivery::query()->value('status'))->toBe(AutomationDeliveryStatus::Sent);
+});
+
+it('lets only one worker process a delivery', function () {
+    $automation = dripAutomation([1]);
+    $user = User::factory()->create();
+    $state = AutomationUserState::factory()->create([
+        'automation_id' => $automation->id,
+        'user_id' => $user->id,
+        'next_step_at' => null,
+    ]);
+    $delivery = AutomationStepDelivery::factory()->create([
+        'automation_user_state_id' => $state->id,
+        'automation_step_id' => $automation->steps->first()->id,
+        'user_id' => $user->id,
+        'status' => 'sending', // another worker owns it RIGHT NOW
+        'updated_at' => now(),
+    ]);
+
+    (new SendAutomationStepJob($delivery->id))->handle(
+        app(BotLocaleResolver::class),
+        app(TokenRenderer::class),
+        app(EmbeddedButtonsRenderer::class),
+        app(BotMessageSender::class),
+        app(AutomationStateAdvancer::class),
+    );
+
+    // The queued→sending claim matched zero rows: no duplicate send.
+    expect(fakeTelegram()->nothingSent())->toBeTrue();
 });
 
 it('completes the journey and applies the cooldown', function () {
@@ -171,26 +274,64 @@ it('sends nothing while paused and preserves next_step_at for resume', function 
         ->and(fakeTelegram()->nothingSent())->toBeFalse();
 });
 
-it('skips the send when paused between claim and job execution', function () {
+it('re-queues the delivery when paused between claim and job execution', function () {
+    config()->set('telegram.automation_delivery_stall_seconds', 0);
     $automation = dripAutomation([1]);
     $user = User::factory()->create();
-    $step = $automation->steps->first();
     $state = AutomationUserState::factory()->create([
         'automation_id' => $automation->id,
         'user_id' => $user->id,
+        'current_step_no' => 0,
+        'next_step_at' => now()->subMinute(),
     ]);
 
-    $automation->update(['is_active' => false]);
+    Queue::fake();
+    app(AutomationRunner::class)->runDue(); // claimed; job "in flight"
+    $automation->update(['is_active' => false]); // paused before the worker ran
 
-    (new SendAutomationStepJob($state->id, $step->id, $user->id))->handle(
+    $delivery = AutomationStepDelivery::query()->first();
+    (new SendAutomationStepJob($delivery->id))->handle(
         app(BotLocaleResolver::class),
         app(TokenRenderer::class),
         app(EmbeddedButtonsRenderer::class),
         app(BotMessageSender::class),
+        app(AutomationStateAdvancer::class),
     );
 
+    // Paused sends nothing (spec §4.10) and NOTHING is lost: the delivery
+    // waits as queued; recovery refuses to touch paused automations.
+    AutomationStepDelivery::query()->whereKey($delivery->id)->update(['updated_at' => now()->subMinutes(10)]);
+
     expect(fakeTelegram()->nothingSent())->toBeTrue()
-        ->and($step->refresh()->sent_count)->toBe(0);
+        ->and($delivery->refresh()->status)->toBe(AutomationDeliveryStatus::Queued)
+        ->and(app(AutomationRunner::class)->recoverStalled())->toBe(0);
+});
+
+it('resumes a paused-parked delivery through recovery once reactivated', function () {
+    config()->set('telegram.automation_delivery_stall_seconds', 0);
+    $automation = dripAutomation([1]);
+    $automation->update(['is_active' => false]);
+    $user = User::factory()->create();
+    // Frozen mid-flight while paused: parked state + queued delivery.
+    $state = AutomationUserState::factory()->create([
+        'automation_id' => $automation->id,
+        'user_id' => $user->id,
+        'current_step_no' => 0,
+        'next_step_at' => null,
+    ]);
+    $delivery = AutomationStepDelivery::factory()->create([
+        'automation_user_state_id' => $state->id,
+        'automation_step_id' => $automation->steps->first()->id,
+        'user_id' => $user->id,
+        'status' => 'queued',
+    ]);
+    AutomationStepDelivery::query()->whereKey($delivery->id)->update(['updated_at' => now()->subMinutes(10)]);
+
+    $automation->update(['is_active' => true]);
+    app(AutomationRunner::class)->recoverStalled();
+
+    expect(fakeTelegram()->sentTo($user->tg_chat_id))->toHaveCount(1)
+        ->and($delivery->refresh()->status)->toBe(AutomationDeliveryStatus::Sent);
 });
 
 it('enrolls genuinely inactive users and only them', function () {
