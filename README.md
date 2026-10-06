@@ -2,15 +2,15 @@
 
 A standalone Laravel 12 application containing the official **KemerBet** Telegram bot
 (webhook mode, EN/AM bilingual), a **Filament v4 admin panel** for the marketing team,
-and a **queue-based sending engine** safe at 100,000+ users.
+and a **durable queue-based sending engine**. Capacity must be measured against your deployment.
 
-Spec: `docs/KEMERBOT-SPEC.md` (authoritative) · Standing rules: `CLAUDE.md` ·
-Runbook: `docs/OPERATIONS.md` · Build log: `docs/PROGRESS.md`
+Current release: [Workspace upgrade](docs/WORKSPACE-UPGRADE.md) · [Installation and upgrade guide](docs/UPGRADE-GUIDE.md) · [Verification and previews](docs/VERIFICATION.md).
+The original spec, hardening notes, and build log are historical references; the durable delivery design in this release supersedes their Redis-only snapshot and failures-only storage descriptions.
 
 ## Stack
 
-Laravel 12 · PHP 8.4 · PostgreSQL · Redis · Filament v4 · Pest.
-Deployed on Laravel Cloud (Serverless Postgres + Valkey).
+Laravel 12 · PHP 8.4.1+ · PostgreSQL · Redis/Valkey · Filament v4 · Pest.
+This source has been verified locally; live deployment and Telegram integration are separate steps.
 
 ## Local development
 
@@ -37,7 +37,7 @@ Tests (never call real Telegram — a full fake is bound in tests):
    `TELEGRAM_WEBHOOK_SECRET`. Secrets live in env only — never in the DB or panel.
 3. **Channel**: add the bot as an **admin** of the KemerBet channel (required for reliable
    `getChatMember` membership checks), then put the channel ID + URL into
-   Administration → Settings.
+   Settings.
 4. **Webhook**: `php artisan telegram:set-webhook` (uses `APP_URL`; pass a tunnel URL in
    dev, e.g. `cloudflared tunnel --url http://localhost:8000` then
    `php artisan telegram:set-webhook https://<tunnel-host>`). The command registers the
@@ -46,16 +46,15 @@ Tests (never call real Telegram — a full fake is bound in tests):
 
 ## Architecture in one paragraph
 
-All Telegram HTTP flows through one `TelegramClient`; every send passes a global Redis
-token bucket (25 msg/s default, env ceiling, DB-tunable below it). The webhook verifies
-its secret, dedupes by `update_id`, and enqueues onto `telegram-interactive` — interactive
-traffic never waits behind a broadcast. Broadcasts freeze their audience into a Redis
-snapshot and self-chaining chunk jobs consume it with atomic LPOPs (one counter UPDATE
-per chunk; failures-only per-user rows). One automation engine (trigger → steps → wait →
-send) powers welcome drips and re-engagement with per-row compare-and-swap claims;
-recurring broadcasts are template rows materialized by the shared scheduler. Everything
-user-facing resolves EN/AM through one `BotLocaleResolver`. All timestamps are stored
-UTC and displayed/scheduled in Africa/Addis_Ababa.
+All Telegram HTTP flows through one client and a shared Redis pacer with per-chat spacing.
+Webhook requests authenticate and commit updates to a PostgreSQL inbox before dispatch.
+Campaigns freeze audiences into a durable recipient ledger. Row leases, fencing tokens,
+and transactional outcomes/counters make recorded sends idempotent and interrupted work recoverable.
+Automations and personal replies use durable delivery records. Separate queue workers keep
+interactive requests moving while campaigns run. Topic preferences, unsubscribe controls,
+quiet hours, and daily contact reservations apply to campaigns and journeys.
+Telegram itself has no message-send idempotency key: a timeout or a crash after Telegram
+accepts a message but before the database commits can still cause an ambiguous duplicate.
 
 ## Queues & scheduler (production)
 

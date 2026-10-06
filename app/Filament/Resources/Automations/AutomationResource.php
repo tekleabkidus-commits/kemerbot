@@ -22,7 +22,7 @@ class AutomationResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedArrowPathRoundedSquare;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Engagement';
+    protected static string|UnitEnum|null $navigationGroup = 'Campaigns';
 
     protected static ?int $navigationSort = 2;
 

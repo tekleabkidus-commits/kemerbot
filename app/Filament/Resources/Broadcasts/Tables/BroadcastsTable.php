@@ -5,8 +5,10 @@ namespace App\Filament\Resources\Broadcasts\Tables;
 use App\Enums\BroadcastStatus;
 use App\Enums\BroadcastType;
 use App\Models\Broadcast;
+use App\Services\AuditLogger;
 use App\Services\Broadcasts\BroadcastLifecycle;
 use App\Services\Broadcasts\BroadcastTestSender;
+use App\Services\Broadcasts\CampaignValidator;
 use App\Services\Broadcasts\InvalidBroadcastTransition;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -15,6 +17,7 @@ use Filament\Notifications\Notification;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\DB;
 
 class BroadcastsTable
 {
@@ -22,7 +25,7 @@ class BroadcastsTable
     {
         return $table
             ->columns([
-                TextColumn::make('id')->label('#')->sortable(),
+                TextColumn::make('name')->label('Campaign')->placeholder('Untitled campaign')->searchable()->description(fn (Broadcast $record) => '#'.$record->id),
                 TextColumn::make('type')
                     ->badge()
                     ->formatStateUsing(fn (BroadcastType $state): string => match ($state) {
@@ -53,16 +56,17 @@ class BroadcastsTable
                     ->formatStateUsing(fn (?array $state): string => $state === null ? '—' : ($state['frequency'] ?? '?'))
                     ->badge()
                     ->color('info')
-                    ->placeholder('—'),
+                    ->toggleable(isToggledHiddenByDefault: true)->placeholder('—'),
                 TextColumn::make('scheduled_at')
                     ->label('Scheduled (Addis)')
                     ->dateTime('d M Y · H:i', timezone: config('app.display_timezone'))
                     ->placeholder('—')
                     ->sortable(),
-                TextColumn::make('queued')->numeric()->label('Queued'),
+                TextColumn::make('queued')->numeric()->label('Queued')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('sent')->numeric()->label('Sent'),
-                TextColumn::make('blocked')->numeric()->label('Blocked'),
-                TextColumn::make('failed')->numeric()->label('Failed'),
+                TextColumn::make('blocked')->numeric()->label('Blocked')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('failed')->numeric()->label('Failed')->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('skipped')->numeric()->label('Skipped')->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('clicks_count')
                     ->label('Clicks')
                     ->counts('clicks'),
@@ -83,8 +87,23 @@ class BroadcastsTable
             ])
             ->defaultSort('created_at', 'desc')
             ->emptyStateHeading('No campaigns yet')
-            ->emptyStateDescription('Create your first Telegram campaign with the 7-step wizard.')
+            ->emptyStateDescription('Share something useful in three simple steps.')
             ->recordActions([
+                Action::make('approve')->label('Approve')->icon('heroicon-o-check-badge')
+                    ->visible(fn (Broadcast $record) => auth()->user()->isOwner() && ! $record->approved_at && in_array($record->status, [BroadcastStatus::Draft, BroadcastStatus::Scheduled], true))
+                    ->requiresConfirmation()->modalDescription('Approve the current message and audience. Any content edit removes approval.')
+                    ->action(function (Broadcast $record) {
+                        abort_unless(auth()->user()->isOwner(), 403);
+                        DB::transaction(function () use ($record) {
+                            $record = Broadcast::query()->lockForUpdate()->findOrFail($record->id);
+                            abort_unless(in_array($record->status, [BroadcastStatus::Draft, BroadcastStatus::Scheduled], true), 409);
+                            app(CampaignValidator::class)->validate($record);
+                            $record->update(['approved_at' => now(), 'approved_by' => auth()->id()]);
+                            app(AuditLogger::class)->log('campaign.approved', $record);
+                        });
+                    }),
+                Action::make('pause')->visible(fn (Broadcast $record) => $record->status === BroadcastStatus::Sending && auth()->user()->can('send', $record))->action(fn (Broadcast $record) => app(BroadcastLifecycle::class)->pause($record)),
+                Action::make('resume')->visible(fn (Broadcast $record) => $record->status === BroadcastStatus::Paused && auth()->user()->can('send', $record))->action(fn (Broadcast $record) => app(BroadcastLifecycle::class)->resume($record)),
                 Action::make('send_now')
                     ->label('Send')
                     ->icon('heroicon-o-paper-airplane')
@@ -98,7 +117,7 @@ class BroadcastsTable
                             app(BroadcastLifecycle::class)->start($record);
                             Notification::make()->title('Broadcast started')->success()->send();
                         } catch (InvalidBroadcastTransition $e) {
-                            Notification::make()->title('Already started')->body('This broadcast was already picked up — double sends are prevented.')->warning()->send();
+                            Notification::make()->title('Campaign needs attention')->body($e->getMessage())->warning()->send();
                         }
                     }),
                 Action::make('test_send')

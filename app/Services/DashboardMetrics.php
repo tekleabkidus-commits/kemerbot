@@ -99,8 +99,9 @@ final class DashboardMetrics
 
             $queued = (int) $totals->queued;
             $sent = (int) $totals->sent;
-            $clicks = ButtonClick::query()->count();
+            $clicks = ButtonClick::query()->whereHas('broadcast', fn ($q) => $q->where('status', BroadcastStatus::Completed))->count();
 
+            $uniqueClickers = DB::table('button_clicks')->join('broadcasts', 'broadcasts.id', '=', 'button_clicks.broadcast_id')->where('broadcasts.status', 'completed')->selectRaw('count(distinct (button_clicks.broadcast_id, button_clicks.user_id)) as total')->value('total');
             $rate = fn (int $part): ?float => $queued > 0 ? round($part / $queued * 100, 1) : null;
 
             return [
@@ -112,7 +113,7 @@ final class DashboardMetrics
                 'sent_rate' => $rate($sent),
                 'blocked_rate' => $rate((int) $totals->blocked),
                 'failed_rate' => $rate((int) $totals->failed),
-                'click_rate' => $sent > 0 ? round($clicks / $sent * 100, 1) : null,
+                'click_rate' => $sent > 0 ? round((int) $uniqueClickers / $sent * 100, 1) : null,
             ];
         });
     }

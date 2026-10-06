@@ -42,8 +42,16 @@ final class BroadcastRenderer
             default => $translation?->text,
         };
 
+        if (($broadcast->delivery_variant ?? 'a') === 'b') {
+            $variant = $broadcast->experiment['text_b'] ?? [];
+            $text = $this->locale->pickFromMap($variant, $lang) ?? $text;
+        }
         if ($text !== null) {
             $text = $this->tokens->renderForUser($text, $user);
+        }
+
+        if (mb_strlen($text ?? '') > ($translation?->mediaFile ? 1024 : 4096)) {
+            throw new InvalidBroadcastTransition('Rendered message is too long');
         }
 
         return new RenderedMessage(

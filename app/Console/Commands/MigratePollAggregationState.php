@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Models\Poll;
+use App\Models\PollInstance;
 use App\Services\Bot\PollService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Redis;
@@ -21,7 +22,7 @@ class MigratePollAggregationState extends Command
 {
     protected $signature = 'polls:migrate-aggregation-state';
 
-    protected $description = 'Convert legacy poll count hashes to per-instance previous-count keys';
+    protected $description = 'Convert legacy poll count hashes to durable per-instance previous counts';
 
     public function handle(PollService $polls): int
     {
@@ -44,6 +45,15 @@ class MigratePollAggregationState extends Command
             Redis::del($legacyKey);
         }
 
+        PollInstance::query()->whereNull('previous_counts')->orderBy('id')->chunkById(500, function ($instances) use ($polls, &$migrated) {
+            foreach ($instances as $instance) {
+                $json = Redis::get('poll:prev:'.$instance->tg_poll_id);
+                if (is_string($json)) {
+                    $polls->seedPreviousCounts($instance->tg_poll_id, (array) json_decode($json, true));
+                    $migrated++;
+                }
+            }
+        });
         $this->info("Seeded previous counts for {$migrated} poll instance(s).");
 
         return self::SUCCESS;

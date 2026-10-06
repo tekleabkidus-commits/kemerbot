@@ -29,6 +29,8 @@ class UserResource extends Resource
 
     protected static ?int $navigationSort = 1;
 
+    protected static ?string $navigationLabel = 'People';
+
     public static function canCreate(): bool
     {
         return false;

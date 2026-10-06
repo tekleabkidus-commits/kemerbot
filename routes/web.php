@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\ConversionController;
 use App\Http\Controllers\TelegramWebhookController;
 use App\Http\Controllers\TrackingRedirectController;
 use App\Http\Middleware\VerifyTelegramWebhookSecret;
 use Illuminate\Support\Facades\Route;
+
+Route::post('/integrations/conversions', ConversionController::class)->middleware('throttle:60,1');
 
 Route::get('/', function () {
     return view('welcome');

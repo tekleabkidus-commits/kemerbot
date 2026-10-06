@@ -5,10 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Broadcasts;
 
 use App\Enums\BroadcastStatus;
+use App\Enums\BroadcastType;
 use App\Jobs\PrepareBroadcastJob;
 use App\Jobs\SendBroadcastChunkJob;
 use App\Models\Broadcast;
 use App\Services\AuditLogger;
+use App\Services\SettingsService;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -70,14 +72,26 @@ final class BroadcastLifecycle
      */
     public function start(Broadcast $broadcast): void
     {
-        $claimed = Broadcast::query()
-            ->whereKey($broadcast->id)
-            ->whereIn('status', [BroadcastStatus::Draft->value, BroadcastStatus::Scheduled->value])
-            ->update(['status' => BroadcastStatus::Preparing->value, 'started_at' => now()]);
+        DB::transaction(function () use ($broadcast) {
+            $broadcast = Broadcast::query()->lockForUpdate()->findOrFail($broadcast->id);
+            if ($broadcast->type === BroadcastType::Poll && ! (app(SettingsService::class)->get('features', [])['polls'] ?? true)) {
+                throw new InvalidBroadcastTransition('Polls are disabled');
+            }
+            $threshold = (int) app(SettingsService::class)->get('campaigns.approval_threshold', 1000);
+            if (app(AudienceQuery::class)->estimatedCount($broadcast->audience_filter) >= $threshold && ! $broadcast->approved_at) {
+                throw new InvalidBroadcastTransition('An Owner must approve this campaign before sending');
+            }
+            app(CampaignValidator::class)->validate($broadcast);
+            $claimed = Broadcast::query()
+                ->whereKey($broadcast->id)
+                ->whereIn('status', [BroadcastStatus::Draft->value, BroadcastStatus::Scheduled->value])
+                ->update(['status' => BroadcastStatus::Preparing->value, 'started_at' => now()]);
 
-        if ($claimed === 0) {
-            throw InvalidBroadcastTransition::alreadyStarted($broadcast->id);
-        }
+            if ($claimed === 0) {
+                throw InvalidBroadcastTransition::alreadyStarted($broadcast->id);
+            }
+
+        });
 
         $broadcast->refresh();
         $this->audit->log('broadcast.started', $broadcast);
@@ -117,9 +131,9 @@ final class BroadcastLifecycle
         $copy = DB::transaction(function () use ($broadcast) {
             $copy = $broadcast->replicate([
                 'status', 'audience_snapshot_count', 'scheduled_at', 'recurrence',
-                'queued', 'sent', 'blocked', 'failed',
+                'queued', 'sent', 'blocked', 'failed', 'skipped',
                 'started_at', 'finished_at', 'cancelled_at',
-                'parent_broadcast_id', 'occurrence_at',
+                'parent_broadcast_id', 'occurrence_at', 'snapshot_built_at', 'approved_at', 'approved_by', 'failure_reason',
             ]);
             $copy->status = BroadcastStatus::Draft;
             $copy->created_by = auth()->id() ?? $broadcast->created_by;
@@ -160,17 +174,26 @@ final class BroadcastLifecycle
             return;
         }
 
-        $count = $this->snapshot->build($broadcast);
+        $prepared = DB::transaction(function () use ($broadcast) {
+            $locked = Broadcast::query()->lockForUpdate()->find($broadcast->id);
+            if (! $locked || $locked->status !== BroadcastStatus::Preparing) {
+                return;
+            }
+            $broadcast = $locked;
+            $count = $this->snapshot->build($broadcast);
 
-        $this->transition($broadcast, BroadcastStatus::Sending, [
-            'audience_snapshot_count' => $count,
-            'queued' => $count,
-        ]);
+            $this->transition($broadcast, BroadcastStatus::Sending, [
+                'audience_snapshot_count' => $count,
+                'queued' => $count,
+            ]);
 
-        Log::info('broadcast.sending', ['broadcast_id' => $broadcast->id, 'queued' => $count]);
+            Log::info('broadcast.sending', ['broadcast_id' => $broadcast->id, 'queued' => $count]);
 
-        SendBroadcastChunkJob::dispatch($broadcast->id)
-            ->onQueue(config('telegram.queues.broadcast'));
+            return true;
+        });
+        if ($prepared) {
+            SendBroadcastChunkJob::dispatch($broadcast->id)->onQueue(config('telegram.queues.broadcast'));
+        }
     }
 
     public function complete(Broadcast $broadcast): void
@@ -188,7 +211,7 @@ final class BroadcastLifecycle
 
     public function fail(Broadcast $broadcast, string $reason): void
     {
-        $this->transition($broadcast, BroadcastStatus::Failed, ['finished_at' => now()]);
+        $this->transition($broadcast, BroadcastStatus::Failed, ['finished_at' => now(), 'failure_reason' => $reason]);
         $this->snapshot->cleanup($broadcast->id);
 
         Log::error('broadcast.failed', ['broadcast_id' => $broadcast->id, 'reason' => $reason]);
@@ -204,6 +227,10 @@ final class BroadcastLifecycle
             throw InvalidBroadcastTransition::between($from, $to);
         }
 
-        $broadcast->forceFill([...$extra, 'status' => $to])->save();
+        $changed = Broadcast::query()->whereKey($broadcast->id)->where('status', $from->value)->update([...$extra, 'status' => $to->value, 'updated_at' => now()]);
+        if (! $changed) {
+            throw InvalidBroadcastTransition::alreadyStarted($broadcast->id);
+        }
+        $broadcast->refresh();
     }
 }

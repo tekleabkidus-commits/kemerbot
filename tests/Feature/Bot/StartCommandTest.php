@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\SettingsService;
 use Database\Seeders\SettingsSeeder;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function () {
     $this->seed(SettingsSeeder::class);
@@ -77,7 +78,9 @@ it('attaches the main menu keyboard to the welcome when menus exist', function (
 });
 
 it('sends welcome media and persists the telegram file_id for reuse', function () {
+    Storage::fake();
     $media = MediaFile::factory()->create();
+    Storage::put($media->path, 'test image fixture');
     app(SettingsService::class)->set('welcome.media_file_id', $media->id);
 
     postWebhook(telegramMessageUpdate(2001, '/start'));

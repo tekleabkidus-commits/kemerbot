@@ -36,7 +36,7 @@ class Settings extends Page
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedCog6Tooth;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Administration';
+    protected static string|UnitEnum|null $navigationGroup = 'Settings';
 
     protected static ?int $navigationSort = 3;
 
@@ -53,6 +53,7 @@ class Settings extends Page
         $mediaPath = $mediaId !== null ? MediaFile::query()->find($mediaId)?->path : null;
 
         $this->form->fill([
+            'daily_limit' => $settings->get('messaging.daily_limit', 3), 'quiet_start' => $settings->get('messaging.quiet_start'), 'quiet_end' => $settings->get('messaging.quiet_end'), 'approval_threshold' => $settings->get('campaigns.approval_threshold', 1000),
             'channel_id' => $settings->get('channel.id'),
             'channel_url' => $settings->get('channel.url'),
             'default_language' => $settings->get('bot.default_language', 'en'),
@@ -76,7 +77,7 @@ class Settings extends Page
         return $schema
             ->components([
                 Text::make(fn (): string => filled(config('telegram.bot_token'))
-                    ? 'Telegram Bot: Connected ✓'
+                    ? 'Telegram Bot: Token configured'
                     : 'Telegram Bot: NOT configured — set TELEGRAM_BOT_TOKEN in the environment.')
                     ->weight('bold'),
                 Section::make('Welcome message')
@@ -108,7 +109,13 @@ class Settings extends Page
                             ->native(false)
                             ->disabled($isViewer),
                     ]),
-                Section::make('Infrastructure')
+                Section::make('Respectful messaging')->description('Promotions from campaigns and journeys share these limits.')->collapsible()->schema([
+                    TextInput::make('daily_limit')->label('Maximum promotions per person per day')->numeric()->minValue(1)->maxValue(9)->disabled(! $isOwner),
+                    TextInput::make('quiet_start')->label('Quiet hours start (0–23, Addis time)')->numeric()->minValue(0)->maxValue(23)->requiredWith('quiet_end')->disabled(! $isOwner),
+                    TextInput::make('quiet_end')->label('Quiet hours end (0–23, Addis time)')->numeric()->minValue(0)->maxValue(23)->requiredWith('quiet_start')->disabled(! $isOwner),
+                    TextInput::make('approval_threshold')->label('Owner approval above this audience size')->numeric()->minValue(1)->disabled(! $isOwner),
+                ]),
+                Section::make('Infrastructure')->collapsible()->collapsed()
                     ->description($isOwner ? 'Owner-only settings.' : 'Only Owners can change these settings.')
                     ->columns(2)
                     ->schema([
@@ -167,6 +174,10 @@ class Settings extends Page
         $features = (array) $settings->get('features', []);
 
         $values = [
+            'messaging.daily_limit' => (int) ($state['daily_limit'] ?? $settings->get('messaging.daily_limit', 3)),
+            'messaging.quiet_start' => array_key_exists('quiet_start', $state) ? (filled($state['quiet_start']) ? (int) $state['quiet_start'] : null) : $settings->get('messaging.quiet_start'),
+            'messaging.quiet_end' => array_key_exists('quiet_end', $state) ? (filled($state['quiet_end']) ? (int) $state['quiet_end'] : null) : $settings->get('messaging.quiet_end'),
+            'campaigns.approval_threshold' => (int) ($state['approval_threshold'] ?? $settings->get('campaigns.approval_threshold', 1000)),
             'channel.id' => array_key_exists('channel_id', $state)
                 ? (filled($state['channel_id']) ? $state['channel_id'] : null)
                 : $settings->get('channel.id'),

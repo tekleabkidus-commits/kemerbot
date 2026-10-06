@@ -55,5 +55,5 @@ it('describes the audience in plain language', function () use ($audience) {
         ->and($audience()->describe(['language' => 'am', 'inactive_days' => 14]))
         ->toContain('for 14+ days')
         ->toContain('language: am')
-        ->toContain('blocked users always excluded');
+        ->toContain('blocked and unsubscribed people excluded');
 });

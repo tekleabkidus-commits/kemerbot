@@ -16,7 +16,9 @@ use App\Services\Broadcasts\BroadcastChunkSender;
 use App\Services\Broadcasts\BroadcastLifecycle;
 use App\Services\Broadcasts\InvalidBroadcastTransition;
 use App\Services\Telegram\TelegramResponse;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 
 function makeBroadcast(array $attrs = []): Broadcast
 {
@@ -30,6 +32,7 @@ function runChunksUntilDone(Broadcast $broadcast, int $safety = 50): void
 {
     // Drive the chunk chain by hand (Queue::fake intercepts self-dispatch).
     while ($safety-- > 0 && $broadcast->refresh()->status === BroadcastStatus::Sending) {
+        DB::table('broadcast_recipients')->where('broadcast_id', $broadcast->id)->where('status', 'ready')->update(['available_at' => now()]);
         app()->make(SendBroadcastChunkJob::class, ['broadcastId' => $broadcast->id])->handle(
             app(AudienceSnapshot::class),
             app(BroadcastChunkSender::class),
@@ -112,9 +115,13 @@ it('retries transient network failures by re-queueing, then succeeds', function 
     config()->set('telegram.send_max_attempts', 3);
     $user = User::factory()->create();
     fakeTelegram()->queueResponse($user->tg_chat_id, TelegramResponse::networkFailure('timeout'), times: 2);
+    Queue::fake();
 
     $broadcast = makeBroadcast();
     app(BroadcastLifecycle::class)->start($broadcast);
+
+    (new PrepareBroadcastJob($broadcast->id))->handle(app(BroadcastLifecycle::class));
+    runChunksUntilDone($broadcast);
 
     $broadcast->refresh();
 
@@ -128,9 +135,13 @@ it('records a permanent failure after exhausting retry attempts', function () {
     config()->set('telegram.send_max_attempts', 2);
     $user = User::factory()->create();
     fakeTelegram()->queueResponse($user->tg_chat_id, TelegramResponse::networkFailure('down'), times: 10);
+    Queue::fake();
 
     $broadcast = makeBroadcast();
     app(BroadcastLifecycle::class)->start($broadcast);
+
+    (new PrepareBroadcastJob($broadcast->id))->handle(app(BroadcastLifecycle::class));
+    runChunksUntilDone($broadcast);
 
     $broadcast->refresh();
     $failure = BroadcastFailure::query()->where('user_id', $user->id)->first();
@@ -270,7 +281,9 @@ it('completes immediately on an empty audience', function () {
 
 it('persists the media file_id on first send and reuses it for the rest', function () {
     User::factory()->count(2)->create();
+    Storage::fake();
     $media = MediaFile::factory()->create();
+    Storage::put($media->path, 'test image fixture');
     $broadcast = Broadcast::factory()->create();
     BroadcastTranslation::factory()->for($broadcast)->create([
         'text' => 'With media',

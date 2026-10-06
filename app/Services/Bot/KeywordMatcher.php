@@ -6,6 +6,7 @@ namespace App\Services\Bot;
 
 use App\Enums\KeywordMatchType;
 use App\Models\KeywordReply;
+use Illuminate\Support\Facades\Cache;
 use Normalizer;
 
 /**
@@ -23,11 +24,11 @@ final class KeywordMatcher
             return null;
         }
 
-        $rules = KeywordReply::query()
+        $rules = Cache::remember('bot:keyword-rules', 60, fn () => KeywordReply::query()
             ->where('is_active', true)
             ->orderBy('position')
             ->orderBy('id')
-            ->get();
+            ->with(['translations', 'mediaFile'])->get());
 
         foreach ($rules as $rule) {
             if ($rule->match_type === KeywordMatchType::Exact) {

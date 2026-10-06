@@ -64,13 +64,13 @@ final class AutomationRunner
                 }
 
                 try {
-                    $delivery = AutomationStepDelivery::query()->create([
+                    $delivery = DB::transaction(fn () => AutomationStepDelivery::query()->create([
                         'automation_user_state_id' => $state->id,
                         'automation_step_id' => $step->id,
                         'user_id' => $state->user_id,
                         'status' => AutomationDeliveryStatus::Queued,
                         'queued_at' => now(),
-                    ]);
+                    ]));
                 } catch (QueryException $e) {
                     if ((string) $e->getCode() === '23505') {
                         // unique(state, step): this step was already claimed —

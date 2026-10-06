@@ -62,7 +62,7 @@ final class AutomationEnroller
             $cutoff = now()->subDays($days);
 
             $candidates = User::query()
-                ->where('blocked_bot', false)
+                ->where('blocked_bot', false)->where('marketing_subscribed', true)
                 ->where(function (Builder $q) use ($cutoff) {
                     $q->where('last_active_at', '<=', $cutoff)
                         ->orWhere(function (Builder $q) use ($cutoff) {
@@ -76,10 +76,10 @@ final class AutomationEnroller
                         ->where('automation_user_states.automation_id', $automation->id)
                         ->where(function ($q) {
                             $q->where('status', AutomationUserStatus::Active->value)
-                                ->orWhere('cooldown_until', '>', now());
+                                ->orWhere('cooldown_until', '>', now())->orWhere('trigger_key', 'inactive:'.now()->toDateString());
                         });
                 })
-                ->cursor();
+                ->limit(1000)->cursor();
 
             foreach ($candidates as $user) {
                 if ($this->enroll($automation, $user, 'inactive:'.now()->toDateString())) {

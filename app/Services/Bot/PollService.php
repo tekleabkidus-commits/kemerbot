@@ -4,41 +4,18 @@ declare(strict_types=1);
 
 namespace App\Services\Bot;
 
-use App\Models\Poll;
 use App\Models\PollInstance;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redis;
 
-/**
- * Poll update ingestion (spec §5.8, §14), correlated through poll_instances.
- *
- * HARDENING §5 — O(options) per update, never O(recipients):
- * each Telegram poll instance keeps only ITS OWN previous counts in one
- * TTL'd Redis key (`poll:prev:{tg_poll_id}`). An incoming `poll` update
- * atomically swaps prev→new (Lua GET+SET, so concurrent updates for the same
- * instance serialize and each sees a consistent predecessor), the per-option
- * deltas are applied to polls.answer_counts in a single row-atomic jsonb
- * UPDATE. Retractions produce negative deltas; a duplicate update produces
- * all-zero deltas and is a no-op. Nothing ever scans other instances.
- *
- * `poll_answer` updates (non-anonymous only) identify the voter — used for
- * activity tracking, never for counting, so the two update types can never
- * double-count.
- */
+/** Durable previous counts and totals commit together under a row lock. */
 final class PollService
 {
-    /** Atomic prev-swap: returns the previous counts json ('' when absent). */
-    private const SWAP_LUA = <<<'LUA'
-        local old = redis.call('GET', KEYS[1])
-        redis.call('SET', KEYS[1], ARGV[1], 'EX', ARGV[2])
-        return old or ''
-    LUA;
-
     public function __construct(private readonly UserService $users) {}
 
-    public function ingestPollUpdate(array $tgPoll): void
+    public function ingestPollUpdate(array $tgPoll, ?int $updateId = null): void
     {
         $tgPollId = $tgPoll['id'] ?? null;
 
@@ -59,23 +36,36 @@ final class PollService
             array_values($tgPoll['options'] ?? []),
         );
 
-        $previous = $this->swapPreviousCounts((string) $tgPollId, $newCounts);
-
-        $deltas = [];
-
-        foreach ($newCounts as $index => $count) {
-            $delta = $count - (int) ($previous[$index] ?? 0);
-
-            if ($delta !== 0) {
-                $deltas[$index] = $delta;
+        DB::transaction(function () use ($instance, $tgPollId, $newCounts, $updateId) {
+            $instance = PollInstance::query()->lockForUpdate()->findOrFail($instance->id);
+            if ($updateId !== null && $instance->last_update_id !== null && $updateId <= $instance->last_update_id) {
+                return;
             }
-        }
+            $previous = $instance->previous_counts;
+            if ($previous === null) {
+                $legacy = Redis::get($this->prevKey((string) $tgPollId));
+                $previous = $legacy ? json_decode($legacy, true) : [];
+            }
 
-        if ($deltas === []) {
-            return; // Duplicate delivery of the same counts — idempotent no-op.
-        }
+            $deltas = [];
 
-        $this->applyDeltas($instance->poll_id, $deltas);
+            foreach ($newCounts as $index => $count) {
+                $delta = $count - (int) ($previous[$index] ?? 0);
+
+                if ($delta !== 0) {
+                    $deltas[$index] = $delta;
+                }
+            }
+
+            if ($deltas === []) {
+                $instance->forceFill(['previous_counts' => $newCounts, 'last_update_id' => $updateId ?? $instance->last_update_id])->save();
+
+                return;
+            }
+
+            $this->applyDeltas($instance->poll_id, $deltas);
+            $instance->forceFill(['previous_counts' => $newCounts, 'last_update_id' => $updateId ?? $instance->last_update_id])->save();
+        });
     }
 
     public function ingestPollAnswer(array $pollAnswer): void
@@ -100,30 +90,13 @@ final class PollService
     /** Seed the per-instance previous counts (state migration / tests). */
     public function seedPreviousCounts(string $tgPollId, array $counts): void
     {
+        PollInstance::query()->where('tg_poll_id', $tgPollId)->update(['previous_counts' => json_encode(array_values($counts))]);
         Redis::set(
             $this->prevKey($tgPollId),
             json_encode(array_values(array_map('intval', $counts))),
             'EX',
             $this->prevTtlSeconds(),
         );
-    }
-
-    /** @return array<int, int> previous counts for this ONE instance */
-    private function swapPreviousCounts(string $tgPollId, array $newCounts): array
-    {
-        $old = Redis::eval(
-            self::SWAP_LUA,
-            1,
-            $this->prevKey($tgPollId),
-            json_encode($newCounts),
-            (string) $this->prevTtlSeconds(),
-        );
-
-        if (! is_string($old) || $old === '') {
-            return [];
-        }
-
-        return array_map('intval', (array) json_decode($old, true));
     }
 
     /**

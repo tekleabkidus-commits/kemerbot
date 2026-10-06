@@ -19,6 +19,7 @@ class User extends Model
     use HasFactory;
 
     protected $fillable = [
+        'marketing_subscribed', 'preferred_language', 'topics', 'daily_message_limit', 'support_status', 'assigned_admin_id', 'support_note', 'converted_at',
         'tg_chat_id',
         'first_name',
         'username',
@@ -36,6 +37,7 @@ class User extends Model
     protected function casts(): array
     {
         return [
+            'marketing_subscribed' => 'boolean', 'topics' => 'array', 'daily_message_limit' => 'integer', 'converted_at' => 'datetime',
             'tg_chat_id' => 'integer',
             'joined_at' => 'datetime',
             'last_active_at' => 'datetime',

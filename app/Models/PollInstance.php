@@ -21,6 +21,7 @@ class PollInstance extends Model
     public $timestamps = false;
 
     protected $fillable = [
+        'previous_counts', 'last_update_id',
         'poll_id',
         'user_id',
         'tg_poll_id',
@@ -30,7 +31,7 @@ class PollInstance extends Model
     protected function casts(): array
     {
         return [
-            'sent_at' => 'datetime',
+            'sent_at' => 'datetime', 'previous_counts' => 'array', 'last_update_id' => 'integer',
         ];
     }
 

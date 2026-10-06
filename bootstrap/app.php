@@ -13,7 +13,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Telegram posts updates cross-origin with its own auth (secret header).
         $middleware->validateCsrfTokens(except: [
-            'telegram/webhook',
+            'telegram/webhook', 'integrations/conversions',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

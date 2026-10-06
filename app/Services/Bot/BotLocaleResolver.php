@@ -19,7 +19,7 @@ final class BotLocaleResolver
 
     public function resolve(User $user): BotLanguage
     {
-        $lang = strtolower((string) $user->language);
+        $lang = strtolower((string) ($user->preferred_language ?? $user->language));
 
         if (str_starts_with($lang, 'am')) {
             return BotLanguage::Am;

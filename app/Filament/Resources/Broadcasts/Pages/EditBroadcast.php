@@ -7,6 +7,7 @@ use App\Enums\BroadcastStatus;
 use App\Filament\Resources\Broadcasts\BroadcastResource;
 use App\Filament\Resources\Broadcasts\Support\BroadcastFormState;
 use App\Filament\Support\FormMedia;
+use App\Models\Broadcast;
 use App\Services\Broadcasts\BroadcastLifecycle;
 use App\Services\Broadcasts\NextOccurrenceCalculator;
 use Filament\Actions\DeleteAction;
@@ -16,6 +17,8 @@ use Illuminate\Support\Carbon;
 class EditBroadcast extends EditRecord
 {
     protected static string $resource = BroadcastResource::class;
+
+    protected ?bool $hasDatabaseTransactions = true;
 
     private array $formState = [];
 
@@ -58,6 +61,7 @@ class EditBroadcast extends EditRecord
         $data['tf_odds_draw'] = $fields['odds']['draw'] ?? null;
         $data['tf_odds_away'] = $fields['odds']['away'] ?? null;
 
+        $data['aud_user_ids'] = $filter['user_ids'] ?? null;
         $data['aud_joined_after'] = $filter['joined_after'] ?? null;
         $data['aud_joined_before'] = $filter['joined_before'] ?? null;
         $data['aud_active_last_days'] = $filter['active_last_days'] ?? null;
@@ -68,7 +72,7 @@ class EditBroadcast extends EditRecord
 
         $data['timing_mode'] = $record->recurrence !== null
             ? 'recurring'
-            : ($record->status === BroadcastStatus::Scheduled ? 'scheduled' : 'now');
+            : ($record->status === BroadcastStatus::Scheduled ? 'scheduled' : 'draft');
         $data['rec_frequency'] = $recurrence['frequency'] ?? null;
         $data['rec_day'] = $recurrence['day'] ?? null;
         $data['rec_day_of_month'] = $recurrence['day_of_month'] ?? null;
@@ -79,9 +83,17 @@ class EditBroadcast extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $locked = Broadcast::query()->lockForUpdate()->findOrFail($this->record->id);
+        abort_unless(auth()->user()->can('update', $locked), 403);
+        $this->record->setRawAttributes($locked->getAttributes(), true);
+        if (array_key_exists('user_ids', $locked->audience_filter ?? [])) {
+            $data['aud_user_ids'] = $locked->audience_filter['user_ids'];
+        }
         $this->formState = $data;
 
         return [
+            'approved_at' => null, 'approved_by' => null,
+            'name' => $data['name'] ?? null, 'topic' => $data['topic'] ?? 'general', 'expires_at' => $data['expires_at'] ?? null, 'experiment' => $data['experiment'] ?? null,
             'type' => $data['type'],
             'audience_filter' => BroadcastFormState::audienceFilter($data),
             'template_fields' => BroadcastFormState::templateFields($data),

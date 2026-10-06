@@ -24,9 +24,13 @@ class BroadcastResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedMegaphone;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Engagement';
+    protected static string|UnitEnum|null $navigationGroup = 'Campaigns';
 
     protected static ?int $navigationSort = 1;
+
+    protected static ?string $navigationLabel = 'Campaigns';
+
+    protected static ?string $modelLabel = 'campaign';
 
     public static function form(Schema $schema): Schema
     {

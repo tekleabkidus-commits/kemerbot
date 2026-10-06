@@ -16,11 +16,10 @@ class BroadcastForm
     {
         return $schema
             ->components([
-                Section::make('Type')->schema(BroadcastWizard::typeStep()),
-                Section::make('Content')->schema(BroadcastWizard::contentStep()),
-                Section::make('Buttons')->schema(BroadcastWizard::buttonsStep()),
+                Section::make('Your message')->schema([...BroadcastWizard::typeStep(), ...BroadcastWizard::contentStep()]),
+                Section::make('Add buttons')->collapsible()->collapsed()->schema(BroadcastWizard::buttonsStep()),
                 Section::make('Audience')->schema(BroadcastWizard::audienceStep()),
-                Section::make('Timing')->schema(BroadcastWizard::timingStep()),
+                Section::make('Review & schedule')->schema(BroadcastWizard::timingStep()),
             ]);
     }
 }

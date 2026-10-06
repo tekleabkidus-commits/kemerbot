@@ -7,8 +7,11 @@ use App\Filament\Resources\Broadcasts\BroadcastResource;
 use App\Filament\Resources\Broadcasts\Schemas\BroadcastWizard;
 use App\Filament\Resources\Broadcasts\Support\BroadcastFormState;
 use App\Filament\Support\FormMedia;
+use App\Services\Broadcasts\AudienceQuery;
 use App\Services\Broadcasts\BroadcastLifecycle;
 use App\Services\Broadcasts\NextOccurrenceCalculator;
+use App\Services\SettingsService;
+use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
 use Filament\Resources\Pages\CreateRecord\Concerns\HasWizard;
 use Illuminate\Support\Carbon;
@@ -31,6 +34,7 @@ class CreateBroadcast extends CreateRecord
         $this->wizardState = $data;
 
         return [
+            'name' => $data['name'] ?? null, 'topic' => $data['topic'] ?? 'general', 'expires_at' => $data['expires_at'] ?? null, 'experiment' => $data['experiment'] ?? null,
             'type' => $data['type'],
             'status' => 'draft',
             'audience_filter' => BroadcastFormState::audienceFilter($data),
@@ -94,13 +98,19 @@ class CreateBroadcast extends CreateRecord
 
         $lifecycle = app(BroadcastLifecycle::class);
 
-        match ($state['timing_mode'] ?? 'now') {
+        if (($state['timing_mode'] ?? 'draft') === 'now' && app(AudienceQuery::class)->estimatedCount($broadcast->audience_filter) >= (int) app(SettingsService::class)->get('campaigns.approval_threshold', 1000)) {
+            Notification::make()->title('Draft saved for Owner approval')->body('An Owner can approve and send this campaign from Campaigns.')->warning()->send();
+
+            return;
+        }
+        match ($state['timing_mode'] ?? 'draft') {
             'scheduled' => $lifecycle->schedule($broadcast, Carbon::parse($state['scheduled_at'])),
             'recurring' => $lifecycle->schedule(
                 $broadcast,
                 app(NextOccurrenceCalculator::class)->next(BroadcastFormState::recurrence($state), now()),
                 BroadcastFormState::recurrence($state),
             ),
+            'draft' => null,
             default => $lifecycle->start($broadcast),
         };
     }

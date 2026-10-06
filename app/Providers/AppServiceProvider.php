@@ -3,6 +3,7 @@
 namespace App\Providers;
 
 use App\Models\Admin;
+use App\Models\AudienceSegment;
 use App\Models\Automation;
 use App\Models\Broadcast;
 use App\Models\KeywordReply;
@@ -14,6 +15,7 @@ use App\Services\SettingsService;
 use App\Services\Telegram\HttpTelegramClient;
 use App\Services\Telegram\TelegramClient;
 use App\Services\Telegram\TelegramRateLimiter;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -41,6 +43,8 @@ class AppServiceProvider extends ServiceProvider
     {
         // Every admin-context create/edit/delete on managed content is audited
         // (spec §5.9). Bot/queue traffic has no acting admin and is skipped.
+        KeywordReply::saved(fn () => Cache::forget('bot:keyword-rules'));
+        KeywordReply::deleted(fn () => Cache::forget('bot:keyword-rules'));
         foreach ([
             MenuItem::class,
             KeywordReply::class,
@@ -48,7 +52,7 @@ class AppServiceProvider extends ServiceProvider
             Automation::class,
             TrackingLink::class,
             Poll::class,
-            Admin::class,
+            Admin::class, AudienceSegment::class,
         ] as $model) {
             $model::observe(AuditsAdminMutations::class);
         }

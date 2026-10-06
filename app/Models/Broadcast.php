@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Campaign row. Status transitions go only through BroadcastLifecycle (spec §7);
- * counter columns are updated one atomic UPDATE per chunk (spec §4.14).
+ * each recipient outcome and its counter commit in the same transaction.
  */
 class Broadcast extends Model
 {
@@ -23,6 +23,7 @@ class Broadcast extends Model
     use HasFactory;
 
     protected $fillable = [
+        'name', 'topic', 'expires_at', 'approved_at', 'approved_by', 'snapshot_built_at', 'experiment', 'failure_reason',
         'type',
         'status',
         'audience_filter',
@@ -34,7 +35,7 @@ class Broadcast extends Model
         'queued',
         'sent',
         'blocked',
-        'failed',
+        'failed', 'skipped',
         'started_at',
         'finished_at',
         'cancelled_at',
@@ -43,6 +44,7 @@ class Broadcast extends Model
     protected function casts(): array
     {
         return [
+            'expires_at' => 'datetime', 'approved_at' => 'datetime', 'snapshot_built_at' => 'datetime', 'experiment' => 'array',
             'type' => BroadcastType::class,
             'status' => BroadcastStatus::class,
             'audience_filter' => 'array',
@@ -53,7 +55,7 @@ class Broadcast extends Model
             'queued' => 'integer',
             'sent' => 'integer',
             'blocked' => 'integer',
-            'failed' => 'integer',
+            'failed' => 'integer', 'skipped' => 'integer',
             'started_at' => 'datetime',
             'finished_at' => 'datetime',
             'cancelled_at' => 'datetime',

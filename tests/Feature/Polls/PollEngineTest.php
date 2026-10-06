@@ -141,23 +141,18 @@ it('processes an update touching only its own instance state — O(options), not
     // Totals moved by exactly the delta — computed WITHOUT reading the other
     // 299 instances (their prev keys are untouched).
     expect($poll->refresh()->answer_counts)->toEqual(['0' => 299, '1' => 1])
-        ->and(Redis::get('poll:prev:'.$instances[5]->tg_poll_id))->toBe('[1,0]')
-        ->and(Redis::get('poll:prev:'.$target->tg_poll_id))->toBe('[0,1]');
+        ->and($instances[5]->refresh()->previous_counts)->toBe([1, 0])
+        ->and($target->refresh()->previous_counts)->toBe([0, 1]);
 });
 
-it('keeps per-instance previous counts under a TTL', function () {
+it('keeps previous poll counts after Redis eviction', function () {
     $poll = Poll::factory()->create();
-    $instance = PollInstance::factory()->for($poll)->create(['tg_poll_id' => 'ttl-check']);
-
-    postWebhook([
-        'update_id' => 710002,
-        'poll' => ['id' => 'ttl-check', 'options' => [['text' => 'A', 'voter_count' => 1]]],
-    ]);
-
-    $ttl = (int) Redis::ttl('poll:prev:ttl-check');
-
-    expect($ttl)->toBeGreaterThan(0)
-        ->and($ttl)->toBeLessThanOrEqual(30 * 86400);
+    $instance = PollInstance::factory()->for($poll)->create(['tg_poll_id' => 'durable-check']);
+    $service = app(PollService::class);
+    $service->ingestPollUpdate(['id' => 'durable-check', 'options' => [['voter_count' => 1]]], 710002);
+    Redis::connection()->flushdb();
+    $service->ingestPollUpdate(['id' => 'durable-check', 'options' => [['voter_count' => 1]]], 710003);
+    expect($instance->refresh()->previous_counts)->toBe([1])->and($poll->refresh()->answer_counts)->toEqual([1]);
 });
 
 it('migrates legacy aggregation state so historical votes are never double-counted', function () {

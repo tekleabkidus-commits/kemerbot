@@ -137,9 +137,14 @@ final class HttpTelegramClient implements TelegramClient
                     fn ($v) => is_array($v) ? json_encode($v) : $v,
                     $params,
                 );
-                $response = $pending
-                    ->attach($uploadField, fopen($uploadPath, 'r'), basename($uploadPath))
-                    ->post($url, $multipartParams);
+                $upload = fopen($uploadPath, 'rb');
+                try {
+                    $response = $pending->attach($uploadField, $upload, basename($uploadPath))->post($url, $multipartParams);
+                } finally {
+                    if (is_resource($upload)) {
+                        fclose($upload);
+                    }
+                }
             } else {
                 $response = $pending->post($url, $params);
             }

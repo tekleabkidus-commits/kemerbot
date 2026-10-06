@@ -18,15 +18,15 @@ afterEach(function () {
     Carbon::setTestNow();
 });
 
-it('allows exactly the configured rate per second globally', function () {
+it('paces sends globally without second-boundary bursts', function () {
     Carbon::setTestNow('2026-08-17 12:00:00');
     app(SettingsService::class)->set('telegram.send_rate', 3);
 
     $limiter = app(TelegramRateLimiter::class);
 
     expect($limiter->tryAcquire())->toBeTrue()
-        ->and($limiter->tryAcquire())->toBeTrue()
-        ->and($limiter->tryAcquire())->toBeTrue()
+        ->and($limiter->tryAcquire())->toBeFalse()
+        ->and($limiter->tryAcquire())->toBeFalse()
         ->and($limiter->tryAcquire())->toBeFalse();
 });
 

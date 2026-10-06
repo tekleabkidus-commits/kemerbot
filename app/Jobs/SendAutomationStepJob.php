@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\AutomationDeliveryStatus;
+use App\Enums\AutomationUserStatus;
 use App\Models\AutomationStepDelivery;
 use App\Services\Automations\AutomationStateAdvancer;
 use App\Services\Bot\BotLocaleResolver;
 use App\Services\Bot\BotMessageSender;
 use App\Services\Bot\EmbeddedButtonsRenderer;
 use App\Services\Bot\TokenRenderer;
+use App\Services\ContactPolicy;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\DB;
@@ -27,6 +29,8 @@ use Illuminate\Support\Facades\Log;
 class SendAutomationStepJob implements ShouldQueue
 {
     use Queueable;
+
+    public int $timeout = 120;
 
     public int $tries = 5;
 
@@ -56,7 +60,7 @@ class SendAutomationStepJob implements ShouldQueue
         if (! $delivery->state->automation->is_active) {
             AutomationStepDelivery::query()
                 ->whereKey($delivery->id)
-                ->whereIn('status', [AutomationDeliveryStatus::Queued->value, AutomationDeliveryStatus::Sending->value])
+                ->where('status', AutomationDeliveryStatus::Queued->value)
                 ->update(['status' => AutomationDeliveryStatus::Queued->value]);
 
             return;
@@ -79,30 +83,66 @@ class SendAutomationStepJob implements ShouldQueue
 
         $delivery->refresh();
 
+        if ($delivery->state->refresh()->status !== AutomationUserStatus::Active) {
+            $this->failDelivery($delivery, 'journey no longer active');
+
+            return;
+        }
+        $response = null;
         $step = $delivery->step;
         $user = $delivery->user;
 
         if ($step === null || $user === null) {
-            $this->failDelivery($delivery, 'step or user no longer exists');
-            $advancer->advancePast($delivery->state, $delivery->state->current_step_no);
+            DB::transaction(function () use ($delivery, $advancer) {
+                $this->failDelivery($delivery, 'step or user no longer exists');
+                $advancer->advancePast($delivery->state, $delivery->state->current_step_no);
+            });
 
             return;
         }
 
         if ($user->blocked_bot) {
-            $this->failDelivery($delivery, 'user has blocked the bot');
-            $advancer->cancel($delivery->state);
+            DB::transaction(function () use ($delivery, $advancer) {
+                $this->failDelivery($delivery, 'user has blocked the bot');
+                $advancer->cancel($delivery->state);
+            });
 
             return;
         }
 
+        $conditions = $delivery->state->automation->trigger_config ?? [];
+        if (($conditions['exit_on_conversion'] ?? false) && $user->converted_at ||
+            ($conditions['exit_on_activity'] ?? false) && $user->last_active_at && $user->last_active_at->gt($delivery->state->triggered_at)) {
+            DB::transaction(function () use ($delivery, $advancer) {
+                $this->failDelivery($delivery, 'journey exit condition met');
+                $advancer->cancel($delivery->state);
+            });
+
+            return;
+        }
+        $decision = app(ContactPolicy::class)->reserve($user, 'automation:'.$delivery->id, $conditions['topic'] ?? 'general');
+        if ($decision === 'skip') {
+            DB::transaction(function () use ($delivery, $advancer) {
+                $this->failDelivery($delivery, 'user messaging preference');
+                $advancer->cancel($delivery->state);
+            });
+
+            return;
+        }
+        if ($decision === 'wait') {
+            $delivery->forceFill(['status' => AutomationDeliveryStatus::Queued, 'attempt_count' => max(0, $delivery->attempt_count - 1)])->save();
+
+            return;
+        }
         $lang = $locale->resolve($user);
         $translation = $locale->pickTranslation($step->translations, $lang);
 
         if ($translation === null && $step->media_file_id === null) {
             Log::warning('automation.step_has_no_content', ['step_id' => $step->id]);
-            $this->failDelivery($delivery, 'step has no content');
-            $advancer->advancePast($delivery->state, $step->step_no);
+            DB::transaction(function () use ($delivery, $advancer, $step) {
+                $this->failDelivery($delivery, 'step has no content');
+                $advancer->advancePast($delivery->state, $step->step_no);
+            });
 
             return;
         }
@@ -112,22 +152,26 @@ class SendAutomationStepJob implements ShouldQueue
         $response = $sender->sendToUser($user, $text, $step->mediaFile, $buttons->render($step->buttons, $lang));
 
         if ($response->successful()) {
-            $step->newQuery()->whereKey($step->id)->update(['sent_count' => DB::raw('sent_count + 1')]);
+            DB::transaction(function () use ($delivery, $step, $advancer) {
+                $step->newQuery()->whereKey($step->id)->update(['sent_count' => DB::raw('sent_count + 1')]);
 
-            $delivery->forceFill([
-                'status' => AutomationDeliveryStatus::Sent,
-                'sent_at' => now(),
-            ])->save();
+                $delivery->forceFill([
+                    'status' => AutomationDeliveryStatus::Sent,
+                    'sent_at' => now(),
+                ])->save();
 
-            // Only NOW does the enrollment move forward (HARDENING §4).
-            $advancer->advancePast($delivery->state, $step->step_no);
+                // Only NOW does the enrollment move forward (HARDENING §4).
+                $advancer->advancePast($delivery->state, $step->step_no);
+            });
 
             return;
         }
 
         if ($response->blockedByUser()) {
-            $this->failDelivery($delivery, 'blocked: '.(string) $response->description);
-            $advancer->cancel($delivery->state);
+            DB::transaction(function () use ($delivery, $advancer, $response) {
+                $this->failDelivery($delivery, 'blocked: '.(string) $response->description);
+                $advancer->cancel($delivery->state);
+            });
 
             return;
         }
@@ -145,8 +189,12 @@ class SendAutomationStepJob implements ShouldQueue
 
         // Permanent (or retry-exhausted): record and move on — never stall
         // the journey on one failed message.
-        $this->failDelivery($delivery, ($response->errorCode ?? 'network').': '.(string) $response->description);
-        $advancer->advancePast($delivery->state, $step->step_no);
+        DB::transaction(function () use ($delivery, $response, $step, $advancer) {
+            DB::transaction(function () use ($delivery, $advancer, $step, $response) {
+                $this->failDelivery($delivery, ($response->errorCode ?? 'network').': '.(string) $response->description);
+                $advancer->advancePast($delivery->state, $step->step_no);
+            });
+        });
     }
 
     public function failed(): void
@@ -157,15 +205,17 @@ class SendAutomationStepJob implements ShouldQueue
             return;
         }
 
-        $delivery->forceFill([
-            'status' => AutomationDeliveryStatus::Failed,
-            'failed_at' => now(),
-            'last_error' => 'job exhausted retries',
-        ])->save();
+        DB::transaction(function () use ($delivery) {
+            $delivery->forceFill([
+                'status' => AutomationDeliveryStatus::Failed,
+                'failed_at' => now(),
+                'last_error' => 'job exhausted retries',
+            ])->save();
 
-        if ($delivery->state !== null) {
-            app(AutomationStateAdvancer::class)->advancePast($delivery->state, $delivery->state->current_step_no);
-        }
+            if ($delivery->state !== null) {
+                app(AutomationStateAdvancer::class)->advancePast($delivery->state, $delivery->state->current_step_no);
+            }
+        });
     }
 
     private function failDelivery(AutomationStepDelivery $delivery, string $reason): void

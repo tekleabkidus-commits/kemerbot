@@ -17,9 +17,12 @@ final class AudienceQuery
     /** @return Builder<User> */
     public function build(?array $filter): Builder
     {
-        $query = User::query()->where('blocked_bot', false);
+        $query = User::query()->where('blocked_bot', false)->where('marketing_subscribed', true);
 
         $filter ??= [];
+        if (isset($filter['user_ids'])) {
+            $query->whereIn('id', $filter['user_ids']);
+        }
 
         if (! empty($filter['joined_after'])) {
             $query->where('joined_at', '>=', $filter['joined_after']);
@@ -41,7 +44,9 @@ final class AudienceQuery
         }
 
         if (! empty($filter['language'])) {
-            $query->where('language', $filter['language']);
+            $query->where(function ($q) use ($filter) {
+                $q->where('preferred_language', $filter['language'])->orWhere(fn ($q) => $q->whereNull('preferred_language')->where('language', $filter['language']));
+            });
         }
 
         if (! empty($filter['source'])) {
@@ -65,6 +70,9 @@ final class AudienceQuery
     {
         $filter ??= [];
         $parts = [];
+        if (isset($filter['user_ids'])) {
+            $parts[] = count($filter['user_ids']).' selected people';
+        }
 
         if (! empty($filter['joined_after'])) {
             $parts[] = 'joined after '.$filter['joined_after'];
@@ -90,6 +98,6 @@ final class AudienceQuery
 
         $summary = $parts === [] ? 'Everyone' : ucfirst(implode(', ', $parts));
 
-        return $summary.' (blocked users always excluded)';
+        return $summary.' (blocked and unsubscribed people excluded)';
     }
 }

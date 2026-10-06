@@ -11,6 +11,7 @@ use App\Services\Bot\BotMessageSender;
 use App\Services\Bot\EmbeddedButtonsRenderer;
 use App\Services\Bot\InboundMessageRecorder;
 use App\Services\Bot\KeywordMatcher;
+use App\Services\Bot\PreferencesHandler;
 use App\Services\Bot\UserService;
 use App\Services\Bot\WelcomeService;
 use App\Services\Telegram\TelegramMembershipService;
@@ -44,6 +45,9 @@ final class IncomingMessageHandler
         $this->users->recordActivity($user);
         $this->inbound->record($user, $message);
 
+        if (app(PreferencesHandler::class)->handle($user, (string) ($message['text'] ?? ''))) {
+            return;
+        }
         if (! $this->membership->isMember($user)) {
             $this->welcome->sendJoinGate($user);
 
@@ -60,6 +64,8 @@ final class IncomingMessageHandler
 
         if ($rule !== null) {
             $this->sendKeywordReply($user, $rule);
+        } else {
+            $user->update(['support_status' => 'open']);
         }
     }
 

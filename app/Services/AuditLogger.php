@@ -18,9 +18,9 @@ final class AuditLogger
 {
     private const FORBIDDEN_META_KEYS = ['password', 'token', 'secret', 'remember_token'];
 
-    public function log(string $action, ?Model $subject = null, array $meta = []): void
+    public function log(string $action, ?Model $subject = null, array $meta = [], ?Admin $actor = null): void
     {
-        $admin = auth()->user();
+        $admin = $actor ?? auth()->user();
 
         if (! $admin instanceof Admin) {
             return;

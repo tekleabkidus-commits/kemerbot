@@ -9,21 +9,17 @@ use App\Models\Broadcast;
 use App\Services\Broadcasts\AudienceSnapshot;
 use App\Services\Broadcasts\BroadcastChunkSender;
 use App\Services\Broadcasts\BroadcastLifecycle;
+use Carbon\Carbon;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Facades\DB;
 
-/**
- * Self-chaining batch worker (spec §7, HARDENING §3). Claims a batch from the
- * audience stream's consumer group — reclaiming entries abandoned by dead
- * workers first — sends it, applies one counter UPDATE, and dispatches the
- * next link. Entries are acknowledged per recipient AFTER their outcome is
- * recorded, so a crash mid-batch leaves the unfinished entries in the pending
- * list to be reclaimed: recipients are never lost. The broadcast completes
- * only when the stream holds no unread and no pending entries.
- */
+/** Sends leased durable recipients; recovery resumes interrupted work. */
 class SendBroadcastChunkJob implements ShouldQueue
 {
     use Queueable;
+
+    public int $timeout = 600;
 
     public int $tries = 3;
 
@@ -52,6 +48,12 @@ class SendBroadcastChunkJob implements ShouldQueue
             return;
         }
 
+        if (! $broadcast->snapshot_built_at) {
+            $lifecycle->fail($broadcast, 'Audience ledger is missing. Review the campaign before creating a new send.');
+
+            return;
+        }
+
         $entries = $snapshot->claimBatch(
             $broadcast->id,
             $this->consumerName(),
@@ -64,6 +66,11 @@ class SendBroadcastChunkJob implements ShouldQueue
             // so a crashed worker can never make the campaign look finished.
             if ($snapshot->outstanding($broadcast->id) === 0) {
                 $lifecycle->complete($broadcast);
+            } elseif (config('queue.default') !== 'sync') {
+                $next = DB::table('broadcast_recipients')->where('broadcast_id', $broadcast->id)->where('status', 'ready')->min('available_at');
+                if ($next) {
+                    self::dispatch($this->broadcastId)->onQueue(config('telegram.queues.broadcast'))->delay(Carbon::parse($next)->max(now()->addSeconds(5)));
+                }
             }
 
             // Outstanding entries belong to another consumer or are inside the

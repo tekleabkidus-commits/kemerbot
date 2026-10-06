@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Broadcasts\Schemas;
 
 use App\Enums\BotLanguage;
 use App\Filament\Resources\Broadcasts\Support\BroadcastFormState;
+use App\Models\AudienceSegment;
 use App\Models\User;
 use App\Services\Broadcasts\AudienceQuery;
 use App\Services\Broadcasts\BroadcastRenderer;
@@ -15,6 +16,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\FileUpload;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Radio;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -32,8 +34,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Wizard\Step;
 
 /**
- * The 7-step broadcast wizard (spec §5.3): Type → Content → Buttons →
- * Audience → Timing → Test → Review. Also reused piecemeal by the edit form.
+ * The three-step campaign builder: message, audience, review and schedule. Also reused piecemeal by the edit form.
  */
 class BroadcastWizard
 {
@@ -41,13 +42,9 @@ class BroadcastWizard
     public static function steps(): array
     {
         return [
-            Step::make('Type')->schema(self::typeStep()),
-            Step::make('Content')->schema(self::contentStep()),
-            Step::make('Buttons')->schema(self::buttonsStep()),
+            Step::make('Your message')->schema([...self::typeStep(), ...self::contentStep(), Section::make('Add buttons')->collapsible()->collapsed()->schema(self::buttonsStep())]),
             Step::make('Audience')->schema(self::audienceStep()),
-            Step::make('Timing')->schema(self::timingStep()),
-            Step::make('Test')->schema(self::testStep()),
-            Step::make('Review')->schema(self::reviewStep()),
+            Step::make('Review & schedule')->schema([...self::timingStep(), ...self::testStep(), ...self::reviewStep()]),
         ];
     }
 
@@ -55,13 +52,14 @@ class BroadcastWizard
     public static function typeStep(): array
     {
         return [
+            TextInput::make('name')->label('Campaign name')->placeholder('e.g. Saturday match reminder')->maxLength(200),
             Radio::make('type')
                 ->label('Campaign type')
-                ->options([
+                ->options(fn () => array_filter([
                     'standard' => 'Standard — text/photo message',
                     'match_card' => 'Match promo — image + structured match caption',
-                    'poll' => 'Poll — native Telegram poll',
-                ])
+                    'poll' => (app(SettingsService::class)->get('features', [])['polls'] ?? true) ? 'Poll — ask your audience' : null,
+                ]))
                 ->default('standard')
                 ->required()
                 ->live(),
@@ -226,6 +224,7 @@ class BroadcastWizard
     {
         $estimate = fn (Get $get): string => number_format(
             app(AudienceQuery::class)->estimatedCount(BroadcastFormState::audienceFilter([
+                'segment_id' => $get('segment_id'), 'aud_user_ids' => $get('aud_user_ids'),
                 'aud_joined_after' => $get('aud_joined_after'),
                 'aud_joined_before' => $get('aud_joined_before'),
                 'aud_active_last_days' => $get('aud_active_last_days'),
@@ -237,8 +236,11 @@ class BroadcastWizard
         );
 
         return [
-            Section::make('Filters')
-                ->description('Leave everything empty to reach everyone. Blocked users are always excluded.')
+            Hidden::make('aud_user_ids'),
+            Text::make(fn (Get $get): string => is_array($get('aud_user_ids')) ? 'This draft is restricted to '.count($get('aud_user_ids')).' selected people. Filters below can narrow that group.' : 'Choose who should receive this message.'),
+            Select::make('segment_id')->label('Start with a saved audience')->options(fn () => AudienceSegment::query()->pluck('name', 'id'))->searchable()->live(),
+            Section::make('Filters')->collapsible()
+                ->description('Leave filters empty to reach the selected audience. Blocked and unsubscribed people are excluded.')
                 ->columns(2)
                 ->schema([
                     DatePicker::make('aud_joined_after')->label('Joined after')->live(),
@@ -259,6 +261,7 @@ class BroadcastWizard
                 ->size('lg')
                 ->weight('bold'),
             Text::make(fn (Get $get): string => app(AudienceQuery::class)->describe(BroadcastFormState::audienceFilter([
+                'segment_id' => $get('segment_id'), 'aud_user_ids' => $get('aud_user_ids'),
                 'aud_joined_after' => $get('aud_joined_after'),
                 'aud_joined_before' => $get('aud_joined_before'),
                 'aud_active_last_days' => $get('aud_active_last_days'),
@@ -274,14 +277,22 @@ class BroadcastWizard
     public static function timingStep(): array
     {
         return [
+            Section::make('Optional campaign controls')->collapsible()->collapsed()->schema([
+                Select::make('topic')->options(['general' => 'General', 'matches' => 'Matches', 'offers' => 'Offers', 'news' => 'News'])->default('general'),
+                DateTimePicker::make('expires_at')->label('Stop sending after')->timezone(config('app.display_timezone'))->seconds(false),
+                Textarea::make('experiment.text_b.en')->label('Alternative message (English)')->helperText('Optional. Half of the audience receives this version.')->maxLength(4000),
+                Textarea::make('experiment.text_b.am')->label('Alternative message (Amharic)')->maxLength(4000),
+                TextInput::make('experiment.holdout_percent')->label('Holdout group (%)')->numeric()->minValue(0)->maxValue(50)->default(0)->helperText('A comparison group that receives no message.'),
+            ]),
             Radio::make('timing_mode')
                 ->label('When should this go out?')
                 ->options([
+                    'draft' => 'Save a draft — send when ready',
                     'now' => 'Send now',
                     'scheduled' => 'Schedule for later',
                     'recurring' => 'Recurring campaign',
                 ])
-                ->default('now')
+                ->default('draft')
                 ->required()
                 ->live(),
             DateTimePicker::make('scheduled_at')
@@ -332,7 +343,7 @@ class BroadcastWizard
                 $recipients = (array) app(SettingsService::class)->get('broadcast.test_recipient_chat_ids', []);
 
                 return $recipients === []
-                    ? 'No test recipients configured. An Owner can add test recipient chat IDs under Administration → Settings.'
+                    ? 'No test recipients configured. An Owner can add test recipient chat IDs under Settings.'
                     : 'Test recipients configured: '.count($recipients).'. The English rendering is sent, prefixed with [TEST].';
             }),
             Actions::make([
@@ -380,6 +391,7 @@ class BroadcastWizard
             }),
             Text::make(function (Get $get): string {
                 $filter = BroadcastFormState::audienceFilter([
+                    'segment_id' => $get('segment_id'), 'aud_user_ids' => $get('aud_user_ids'),
                     'aud_joined_after' => $get('aud_joined_after'),
                     'aud_joined_before' => $get('aud_joined_before'),
                     'aud_active_last_days' => $get('aud_active_last_days'),
@@ -398,6 +410,7 @@ class BroadcastWizard
             Text::make(fn (Get $get): string => 'Timing: '.match ($get('timing_mode')) {
                 'scheduled' => 'scheduled for '.($get('scheduled_at') ?? '?').' (Addis time)',
                 'recurring' => 'recurring — '.($get('rec_frequency') ?? '?').' at '.($get('rec_time') ?? '?').' (Addis time)',
+                'draft' => 'save as a draft',
                 default => 'send immediately on confirm',
             }),
             Text::make('Confirming saves the campaign and applies the timing above. Immediate sends start right away.'),

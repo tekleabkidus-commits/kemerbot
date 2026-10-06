@@ -50,6 +50,9 @@ class AutomationForm
                                     $fail('Re-engagement journeys need a cooldown of at least 1 day to avoid re-spamming inactive users.');
                                 }
                             }),
+                        Toggle::make('trigger_config.exit_on_conversion')->label('Finish when the user converts')->default(true),
+                        Toggle::make('trigger_config.exit_on_activity')->label('Finish when the user returns')->default(false),
+                        Select::make('trigger_config.topic')->label('Topic')->options(['general' => 'General', 'matches' => 'Matches', 'offers' => 'Offers', 'news' => 'News'])->default('general'),
                         Toggle::make('is_active')
                             ->label('Active')
                             ->default(false)

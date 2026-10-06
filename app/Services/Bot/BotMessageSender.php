@@ -7,10 +7,10 @@ namespace App\Services\Bot;
 use App\Enums\MediaKind;
 use App\Models\MediaFile;
 use App\Models\User;
+use App\Services\MediaPayload;
 use App\Services\Telegram\TelegramClient;
 use App\Services\Telegram\TelegramRateLimiter;
 use App\Services\Telegram\TelegramResponse;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Shared send abstraction for interactive traffic (spec §10). Every send
@@ -31,12 +31,18 @@ final class BotMessageSender
             return TelegramResponse::failure(403, 'skipped: user has blocked the bot');
         }
 
-        $this->limiter->acquire();
+        if (mb_strlen($text ?? '') > ($media ? 1024 : 4096)) {
+            return TelegramResponse::failure(400, 'Rendered message exceeds Telegram length limit');
+        }
+        $this->limiter->acquire(chatId: $user->tg_chat_id);
         $response = $this->dispatchSend($user->tg_chat_id, $text, $media, $replyMarkup);
 
         if ($response->rateLimited()) {
             $this->limiter->pause($response->retryAfter ?? 3);
-            $this->limiter->acquire();
+            if (mb_strlen($text ?? '') > ($media ? 1024 : 4096)) {
+                return TelegramResponse::failure(400, 'Rendered message exceeds Telegram length limit');
+            }
+            $this->limiter->acquire(chatId: $user->tg_chat_id);
             $response = $this->dispatchSend($user->tg_chat_id, $text, $media, $replyMarkup);
         }
 
@@ -61,12 +67,10 @@ final class BotMessageSender
             return $this->client->sendText($chatId, (string) $text, $replyMarkup);
         }
 
-        $payload = $media->tg_file_id ?? Storage::path($media->path);
-
-        return match ($media->kind) {
+        return app(MediaPayload::class)->withFile($media, fn (string $payload) => match ($media->kind) {
             MediaKind::Photo => $this->client->sendPhoto($chatId, $payload, $text, $replyMarkup),
             MediaKind::Video => $this->client->sendVideo($chatId, $payload, $text, $replyMarkup),
             MediaKind::Animation => $this->client->sendAnimation($chatId, $payload, $text, $replyMarkup),
-        };
+        });
     }
 }

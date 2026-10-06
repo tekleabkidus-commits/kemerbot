@@ -6,6 +6,7 @@ use App\Filament\Resources\Automations\AutomationResource;
 use App\Filament\Resources\Automations\Support\SavesAutomationSteps;
 use Filament\Actions\DeleteAction;
 use Filament\Resources\Pages\EditRecord;
+use Illuminate\Validation\ValidationException;
 
 class EditAutomation extends EditRecord
 {
@@ -32,6 +33,9 @@ class EditAutomation extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        if ($this->record->userStates()->where('status', 'active')->exists() && ($data['steps_data'] ?? []) !== $this->fillStepsData($this->record)) {
+            throw ValidationException::withMessages(['data.steps_data' => 'This journey has active participants. Keep its steps unchanged, or create a new journey.']);
+        }
         $this->stepsData = $data['steps_data'] ?? [];
         unset($data['steps_data']);
 

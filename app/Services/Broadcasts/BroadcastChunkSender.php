@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Broadcasts;
 
+use App\Enums\BroadcastStatus;
 use App\Enums\BroadcastType;
 use App\Enums\FailureCategory;
 use App\Enums\MediaKind;
@@ -13,20 +14,15 @@ use App\Models\PollInstance;
 use App\Models\User;
 use App\Services\Bot\BotLocaleResolver;
 use App\Services\Bot\UserService;
+use App\Services\ContactPolicy;
+use App\Services\MediaPayload;
+use App\Services\MediaUnavailable;
 use App\Services\Telegram\TelegramClient;
 use App\Services\Telegram\TelegramRateLimiter;
 use App\Services\Telegram\TelegramResponse;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
+use Carbon\Carbon;
 
-/**
- * Sends one claimed batch of a broadcast (spec §7, HARDENING §3): render per
- * user, send through the global rate limiter, classify results, ONE atomic
- * counter UPDATE per batch (spec §4.14). Entries are acknowledged only after
- * their outcome is recorded; recipients already in the done set (reclaimed
- * duplicates after a crash) are acknowledged without re-sending or
- * re-counting. Retryables re-queue to the stream tail with attempt+1.
- */
+/** Sends leased recipients and commits each outcome with its counter. */
 final class BroadcastChunkSender
 {
     public function __construct(
@@ -48,53 +44,47 @@ final class BroadcastChunkSender
             ->get()
             ->keyBy('id');
 
-        $sent = 0;
-        $blocked = 0;
-        $failed = 0;
-
         foreach ($entries as $entry) {
-            // Idempotent bookkeeping: a reclaimed duplicate is finished work.
-            if ($this->snapshot->isDone($broadcast->id, $entry['user_id'])) {
-                $this->snapshot->ack($broadcast->id, $entry['id']);
+            $broadcast->refresh();
+            if ($broadcast->status !== BroadcastStatus::Sending) {
+                $this->snapshot->defer($broadcast->id, $entry, 1);
 
                 continue;
             }
+            if (($broadcast->expires_at && $broadcast->expires_at->isPast()) ||
+                ($broadcast->type === BroadcastType::MatchCard && filled($broadcast->template_fields['kickoff_at'] ?? null) && Carbon::parse($broadcast->template_fields['kickoff_at'])->isPast())) {
+                $this->snapshot->finish($broadcast->id, $entry, 'skipped');
 
+                continue;
+            }
+            if ($this->snapshot->isDone($broadcast->id, $entry['user_id'])) {
+                continue;
+            }
             $user = $usersById->get($entry['user_id']);
+            $decision = $user ? app(ContactPolicy::class)->reserve($user, 'broadcast:'.$broadcast->id.':'.$user->id, $broadcast->topic ?? 'general') : 'skip';
+            if ($decision === 'wait') {
+                $this->snapshot->defer($broadcast->id, $entry);
 
-            $outcome = ($user === null || $user->blocked_bot)
-                // Deleted or blocked since the snapshot froze: blocked-skip.
-                ? 'blocked'
-                : $this->sendToUser($broadcast, $user, $entry['attempt']);
+                continue;
+            }
+            if ($decision === 'skip') {
+                $this->snapshot->finish($broadcast->id, $entry, $user?->blocked_bot ? 'blocked' : 'skipped');
 
+                continue;
+            }
+            $broadcast->setAttribute('delivery_variant', $entry['variant'] ?? 'a');
+            try {
+                $outcome = $this->sendToUser($broadcast, $user, $entry['attempt']);
+            } catch (MediaUnavailable|InvalidBroadcastTransition $e) {
+                $this->recordFailure($broadcast, $user, TelegramResponse::failure(0, 'Content or media is unavailable'), FailureCategory::Other, $entry['attempt']);
+                $outcome = 'failed';
+            }
             if ($outcome === 'requeued') {
-                // Re-adds at the tail and acks the old entry; the recipient
-                // is NOT done and NOT counted yet.
                 $this->snapshot->requeueForRetry($broadcast->id, $entry);
 
                 continue;
             }
-
-            if ($this->snapshot->markDone($broadcast->id, $entry['user_id'])) {
-                match ($outcome) {
-                    'sent' => $sent++,
-                    'blocked' => $blocked++,
-                    'failed' => $failed++,
-                };
-            }
-
-            $this->snapshot->ack($broadcast->id, $entry['id']);
-        }
-
-        // Decision 14: one atomic counter UPDATE per batch, never per message.
-        // updated_at doubles as the stall-detection heartbeat.
-        if ($sent > 0 || $blocked > 0 || $failed > 0) {
-            Broadcast::query()->whereKey($broadcast->id)->update([
-                'sent' => DB::raw('sent + '.$sent),
-                'blocked' => DB::raw('blocked + '.$blocked),
-                'failed' => DB::raw('failed + '.$failed),
-                'updated_at' => now(),
-            ]);
+            $this->snapshot->finish($broadcast->id, $entry, $outcome);
         }
     }
 
@@ -137,12 +127,12 @@ final class BroadcastChunkSender
         $question = $this->locale->pickFromMap($poll->question, $lang) ?? '?';
         $options = $poll->options[$lang->value] ?? $poll->options['en'] ?? [];
 
-        $this->limiter->acquire();
+        $this->limiter->acquire(chatId: $user->tg_chat_id);
         $response = $this->client->sendPoll($user->tg_chat_id, $question, $options, $poll->is_anonymous);
 
         if ($response->rateLimited()) {
             $this->limiter->pause($response->retryAfter ?? 3);
-            $this->limiter->acquire();
+            $this->limiter->acquire(chatId: $user->tg_chat_id);
             $response = $this->client->sendPoll($user->tg_chat_id, $question, $options, $poll->is_anonymous);
         }
 
@@ -192,13 +182,13 @@ final class BroadcastChunkSender
 
     private function attemptSend(User $user, RenderedMessage $message): TelegramResponse
     {
-        $this->limiter->acquire();
+        $this->limiter->acquire(chatId: $user->tg_chat_id);
         $response = $this->dispatchSend($user->tg_chat_id, $message);
 
         // 429: pause the global bucket for retry_after, then one immediate retry.
         if ($response->rateLimited()) {
             $this->limiter->pause($response->retryAfter ?? 3);
-            $this->limiter->acquire();
+            $this->limiter->acquire(chatId: $user->tg_chat_id);
             $response = $this->dispatchSend($user->tg_chat_id, $message);
         }
 
@@ -213,13 +203,11 @@ final class BroadcastChunkSender
             return $this->client->sendText($chatId, (string) $message->text, $message->replyMarkup);
         }
 
-        $payload = $media->tg_file_id ?? Storage::path($media->path);
-
-        return match ($media->kind) {
+        return app(MediaPayload::class)->withFile($media, fn (string $payload) => match ($media->kind) {
             MediaKind::Photo => $this->client->sendPhoto($chatId, $payload, $message->text, $message->replyMarkup),
             MediaKind::Video => $this->client->sendVideo($chatId, $payload, $message->text, $message->replyMarkup),
             MediaKind::Animation => $this->client->sendAnimation($chatId, $payload, $message->text, $message->replyMarkup),
-        };
+        });
     }
 
     /** First successful send persists the Telegram file_id for reuse (spec §4.13). */

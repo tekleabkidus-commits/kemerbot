@@ -98,6 +98,8 @@ final class BroadcastScheduler
                     $child->forceFill([
                         'parent_broadcast_id' => $locked->id,
                         'occurrence_at' => $occurrenceAt,
+                        'status' => BroadcastStatus::Scheduled, 'scheduled_at' => now(),
+                        'approved_at' => $locked->approved_at, 'approved_by' => $locked->approved_by,
                     ])->save();
                 }
 

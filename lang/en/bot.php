@@ -15,4 +15,8 @@ return [
     'option_unavailable' => 'This option is no longer available.',
     'welcome_fallback' => 'Welcome to KemerBet, {first_name}! ⚽',
     'invite_text' => "Invite your friends to KemerBet! 🎉\nShare your personal link:\n:link",
+    'unsubscribed' => 'You have paused promotional messages. Use /subscribe to receive them again.',
+    'subscribed' => 'You are subscribed. Use /preferences to choose what you receive.',
+    'preferences_saved' => 'Your preferences are saved.',
+    'preferences_help' => 'Your messages, your choice.\n/stop — pause promotions\n/subscribe — receive promotions\n/language en or /language am\n/topics general,matches,offers,news\n/frequency 1 — maximum promotions per day',
 ];

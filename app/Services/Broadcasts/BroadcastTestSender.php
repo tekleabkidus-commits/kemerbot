@@ -10,11 +10,11 @@ use App\Enums\MediaKind;
 use App\Models\Broadcast;
 use App\Models\User;
 use App\Services\AuditLogger;
+use App\Services\MediaPayload;
 use App\Services\SettingsService;
 use App\Services\Telegram\TelegramClient;
 use App\Services\Telegram\TelegramRateLimiter;
 use App\Services\Telegram\TelegramResponse;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Wizard step 6 (spec §5.3): send the rendered broadcast to the configured
@@ -79,13 +79,13 @@ final class BroadcastTestSender
     private function sendMedia(int $chatId, RenderedMessage $message): TelegramResponse
     {
         $media = $message->media;
-        $payload = $media->tg_file_id ?? Storage::path($media->path);
+
         $caption = '[TEST] '.$message->text;
 
-        return match ($media->kind) {
+        return app(MediaPayload::class)->withFile($media, fn (string $payload) => match ($media->kind) {
             MediaKind::Photo => $this->client->sendPhoto($chatId, $payload, $caption, $message->replyMarkup),
             MediaKind::Video => $this->client->sendVideo($chatId, $payload, $caption, $message->replyMarkup),
             MediaKind::Animation => $this->client->sendAnimation($chatId, $payload, $caption, $message->replyMarkup),
-        };
+        });
     }
 }

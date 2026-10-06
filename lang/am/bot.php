@@ -13,4 +13,8 @@ return [
     'option_unavailable' => 'ይህ አማራጭ ከአሁን በኋላ አይገኝም።',
     'welcome_fallback' => 'እንኳን ወደ KemerBet በደህና መጡ {first_name}! ⚽',
     'invite_text' => "ጓደኞችዎን ወደ KemerBet ይጋብዙ! 🎉\nየግል ማስፈንጠሪያዎን ያጋሩ፦\n:link",
+    'unsubscribed' => 'የማስታወቂያ መልእክቶች ቆመዋል። እንደገና ለመቀበል /subscribe ይጠቀሙ።',
+    'subscribed' => 'መልእክቶችን ለመቀበል ተመዝግበዋል። ምርጫዎችን ለማስተካከል /preferences ይጠቀሙ።',
+    'preferences_saved' => 'ምርጫዎችዎ ተቀምጠዋል።',
+    'preferences_help' => 'መልእክቶችዎን ይምረጡ።\n/stop — ማስታወቂያዎችን አቁም\n/subscribe — ማስታወቂያዎችን ተቀበል\n/language en ወይም /language am\n/topics general,matches,offers,news\n/frequency 1 — በቀን የመልእክት ገደብ',
 ];

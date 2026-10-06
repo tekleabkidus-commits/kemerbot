@@ -8,6 +8,7 @@ use App\Models\TrackingLink;
 use App\Models\User;
 use App\Telegram\StartPayload;
 use App\Telegram\StartPayloadType;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Bot-audience lifecycle: create-or-update from Telegram, first-touch
@@ -27,8 +28,7 @@ final class UserService
         $user = User::query()->where('tg_chat_id', $chatId)->first();
 
         if ($user === null) {
-            $user = User::query()->create([
-                'tg_chat_id' => $chatId,
+            $user = User::query()->createOrFirst(['tg_chat_id' => $chatId], [
                 'first_name' => (string) ($from['first_name'] ?? ''),
                 'username' => $from['username'] ?? null,
                 'language' => $from['language_code'] ?? null,
@@ -36,7 +36,7 @@ final class UserService
                 'last_active_at' => now(),
             ]);
 
-            return [$user, true];
+            return [$user, $user->wasRecentlyCreated];
         }
 
         // Refresh profile fields if Telegram reports changes (spec §5.1).
@@ -61,20 +61,26 @@ final class UserService
     public function applyAttribution(User $user, StartPayload $payload): void
     {
         if ($payload->type === StartPayloadType::Source && $user->source === null) {
-            $user->update(['source' => $payload->source]);
+            DB::transaction(function () use ($user, $payload) {
+                if (! User::query()->whereKey($user->id)->whereNull('source')->update(['source' => $payload->source])) {
+                    return;
+                }
+                $user->refresh();
 
-            // Joins counted once, at first-touch attribution only (spec §5.6).
-            TrackingLink::query()
-                ->where('code', $payload->source)
-                ->where('is_active', true)
-                ->increment('joins_count');
+                // Joins counted once, at first-touch attribution only (spec §5.6).
+                TrackingLink::query()
+                    ->where('code', $payload->source)
+                    ->where('is_active', true)
+                    ->increment('joins_count');
+            });
         }
 
         if ($payload->type === StartPayloadType::Referral && $user->referred_by_user_id === null) {
             $referrer = User::query()->find($payload->referrerUserId);
 
             if ($referrer !== null && $referrer->id !== $user->id) {
-                $user->update(['referred_by_user_id' => $referrer->id]);
+                User::query()->whereKey($user->id)->whereNull('referred_by_user_id')->update(['referred_by_user_id' => $referrer->id]);
+                $user->refresh();
             }
         }
     }

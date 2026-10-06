@@ -47,7 +47,7 @@ final class TelegramWebhookProcessor
         }
 
         if (isset($update['poll']) && is_array($update['poll'])) {
-            $this->polls->ingestPollUpdate($update['poll']);
+            $this->polls->ingestPollUpdate($update['poll'], $update['update_id'] ?? null);
 
             return;
         }

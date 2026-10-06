@@ -21,7 +21,7 @@ class PollResource extends Resource
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedChartBar;
 
-    protected static string|UnitEnum|null $navigationGroup = 'Engagement';
+    protected static string|UnitEnum|null $navigationGroup = 'Campaigns';
 
     protected static ?int $navigationSort = 3;
 

@@ -6,6 +6,7 @@ namespace App\Services\Automations;
 
 use App\Enums\AutomationUserStatus;
 use App\Models\AutomationUserState;
+use Illuminate\Support\Facades\DB;
 
 /**
  * The single place enrollment state moves forward (HARDENING §4). Called
@@ -17,27 +18,30 @@ final class AutomationStateAdvancer
     /** Advance past the given step: schedule the next one or finish. */
     public function advancePast(AutomationUserState $state, int $completedStepNo): void
     {
-        if ($state->status !== AutomationUserStatus::Active) {
-            return;
-        }
+        DB::transaction(function () use ($state, $completedStepNo) {
+            $state = AutomationUserState::query()->lockForUpdate()->find($state->id);
+            if (! $state || $state->status !== AutomationUserStatus::Active || $state->current_step_no !== $completedStepNo) {
+                return;
+            }
 
-        $next = $state->automation->steps
-            ->filter(fn ($step) => $step->step_no > $completedStepNo)
-            ->sortBy('step_no')
-            ->first();
+            $next = $state->automation->steps
+                ->filter(fn ($step) => $step->step_no > $completedStepNo)
+                ->sortBy('step_no')
+                ->first();
 
-        if ($next !== null) {
-            // Decision 4: the next delay counts from the step just processed.
-            $state->forceFill([
-                'current_step_no' => $next->step_no,
-                'next_step_at' => now()->addHours($next->delay_hours),
-                'last_step_sent_at' => now(),
-            ])->save();
+            if ($next !== null) {
+                // Decision 4: the next delay counts from the step just processed.
+                $state->forceFill([
+                    'current_step_no' => $next->step_no,
+                    'next_step_at' => now()->addHours($next->delay_hours),
+                    'last_step_sent_at' => now(),
+                ])->save();
 
-            return;
-        }
+                return;
+            }
 
-        $this->finish($state, ['last_step_sent_at' => now()]);
+            $this->finish($state, ['last_step_sent_at' => now()]);
+        });
     }
 
     /** Finish the journey: completed, or cooldown when configured. */

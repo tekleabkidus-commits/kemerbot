@@ -7,6 +7,7 @@ namespace App\Services\Bot;
 use App\Enums\BotLanguage;
 use App\Enums\MenuActionType;
 use App\Models\MenuItem;
+use App\Services\SettingsService;
 use Illuminate\Database\Eloquent\Collection;
 
 /**
@@ -39,6 +40,9 @@ final class MenuRenderer
     /** @param  Collection<int, MenuItem>  $items */
     private function keyboard(Collection $items, BotLanguage $lang, ?int $backTo): array
     {
+        $features = app(SettingsService::class)->get('features', []);
+        $items = $items->filter(fn ($item) => ($item->action_type !== MenuActionType::Webapp || ($features['mini_app'] ?? true)) && ($item->action_type !== MenuActionType::Invite || ($features['referrals'] ?? true)));
+        $items = $items->filter(fn ($item) => $item->action_type !== MenuActionType::Webapp || str_starts_with((string) ($item->url ?: app(SettingsService::class)->get('webapp.url')), 'https://'));
         $rows = $items
             ->map(fn (MenuItem $item) => [$this->button($item, $lang)])
             ->values()
@@ -61,7 +65,7 @@ final class MenuRenderer
 
         return match ($item->action_type) {
             MenuActionType::Url => ['text' => $label, 'url' => (string) $item->url],
-            MenuActionType::Webapp => ['text' => $label, 'web_app' => ['url' => (string) $item->url]],
+            MenuActionType::Webapp => ['text' => $label, 'web_app' => ['url' => (string) ($item->url ?: app(SettingsService::class)->get('webapp.url'))]],
             MenuActionType::Invite => ['text' => $label, 'callback_data' => 'invite:show'],
             MenuActionType::Reply,
             MenuActionType::Submenu => ['text' => $label, 'callback_data' => 'menu:'.$item->id],

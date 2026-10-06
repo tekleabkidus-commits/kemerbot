@@ -19,7 +19,9 @@ final class SettingsService
 
     public function get(string $key, mixed $default = null): mixed
     {
-        return $this->all()[$key] ?? $default;
+        $settings = $this->all();
+
+        return array_key_exists($key, $settings) ? $settings[$key] : $default;
     }
 
     public function set(string $key, mixed $value): void

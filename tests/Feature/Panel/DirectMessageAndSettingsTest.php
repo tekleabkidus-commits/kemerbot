@@ -53,7 +53,7 @@ it('audits the dm action and dispatches on the interactive queue', function () {
         ->test(ViewUser::class, ['record' => $user->id])
         ->callAction('send_message', ['text' => 'Welcome back!']);
 
-    expect(AuditLog::query()->where('action', 'direct_message.sent')->exists())->toBeTrue()
+    expect(AuditLog::query()->where('action', 'direct_message.queued')->exists())->toBeTrue()
         ->and(TelegramMessage::query()->where('direction', MessageDirection::AdminOutbound)->count())->toBe(1);
 });
 

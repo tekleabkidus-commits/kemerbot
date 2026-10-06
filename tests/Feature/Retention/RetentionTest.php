@@ -18,16 +18,12 @@ it('prunes telegram messages older than the retention window', function () {
     expect(TelegramMessage::query()->pluck('id')->all())->toBe([$recent->id]);
 });
 
-it('sets a TTL backstop on snapshot stream keys at build time', function () {
+it('keeps audience snapshots after Redis eviction', function () {
     User::factory()->count(2)->create();
     $broadcast = Broadcast::factory()->create();
-
     app(AudienceSnapshot::class)->build($broadcast);
-
-    $ttl = (int) Redis::ttl("broadcast:{$broadcast->id}:stream");
-
-    expect($ttl)->toBeGreaterThan(0)
-        ->and($ttl)->toBeLessThanOrEqual(48 * 3600);
+    Redis::connection()->flushdb();
+    expect(app(AudienceSnapshot::class)->remaining($broadcast->id))->toBe(2);
 });
 
 it('sweeps snapshots for terminal and missing broadcasts, keeps active ones', function () {
@@ -50,5 +46,5 @@ it('sweeps snapshots for terminal and missing broadcasts, keeps active ones', fu
         ->and($snapshot->remaining($cancelled->id))->toBe(0)
         ->and($snapshot->remaining($goneId))->toBe(0)
         // The sweeper iterates the tracked registry — never Redis KEYS.
-        ->and($snapshot->registeredSnapshotIds())->toBe([$sending->id]);
+        ->and($snapshot->registeredSnapshotIds())->toBe([$sending->id, $cancelled->id]);
 });

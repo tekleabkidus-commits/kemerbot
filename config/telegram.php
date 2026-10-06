@@ -10,6 +10,7 @@ return [
     |--------------------------------------------------------------------------
     */
 
+    'conversion_api_key' => env('CONVERSION_API_KEY'),
     'bot_token' => env('TELEGRAM_BOT_TOKEN'),
     'bot_username' => env('TELEGRAM_BOT_USERNAME'),
     'webhook_secret' => env('TELEGRAM_WEBHOOK_SECRET'),
@@ -81,11 +82,11 @@ return [
 
     // A recipient claimed by a worker (stream pending entry) longer than this
     // is considered abandoned and reclaimed by another worker.
-    'broadcast_claim_timeout_seconds' => (int) env('TELEGRAM_BROADCAST_CLAIM_TIMEOUT', 300),
+    'broadcast_claim_timeout_seconds' => (int) env('TELEGRAM_BROADCAST_CLAIM_TIMEOUT', 720),
 
     // A `sending` broadcast with no counter progress for this long gets its
     // chunk chain re-dispatched by broadcasts:recover-stalled.
-    'broadcast_stall_seconds' => (int) env('TELEGRAM_BROADCAST_STALL_SECONDS', 120),
+    'broadcast_stall_seconds' => (int) env('TELEGRAM_BROADCAST_STALL_SECONDS', 780),
 
     // Automation outbox recovery: re-dispatch queued deliveries idle longer
     // than this; reset `sending` deliveries idle longer than 2x this.

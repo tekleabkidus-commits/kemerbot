@@ -17,6 +17,8 @@ class PrepareBroadcastJob implements ShouldQueue
 {
     use Queueable;
 
+    public int $timeout = 600;
+
     public int $tries = 2;
 
     public function __construct(public readonly int $broadcastId) {}

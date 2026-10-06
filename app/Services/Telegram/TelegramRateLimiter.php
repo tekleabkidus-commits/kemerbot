@@ -5,77 +5,64 @@ declare(strict_types=1);
 namespace App\Services\Telegram;
 
 use App\Services\SettingsService;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Redis;
 use RuntimeException;
 
-/**
- * Global Redis token bucket for ALL Telegram sends (spec §10): N workers still
- * collectively respect the cap. The env value is the hard ceiling; the DB
- * setting `telegram.send_rate` may lower it at runtime. Honors 429 retry_after
- * by pausing the whole bucket — the only place send-throttling sleeps live.
- */
 final class TelegramRateLimiter
 {
-    private const WINDOW_KEY_PREFIX = 'telegram:rl:';
+    private const ACQUIRE = <<<'LUA'
+ local t=tonumber(ARGV[1])
+ local pause=tonumber(redis.call('GET',KEYS[1]) or '0')
+ local next=tonumber(redis.call('GET',KEYS[2]) or '0')
+ local chat=tonumber(redis.call('GET',KEYS[3]) or '0')
+ if pause>t or next>t or chat>t then return 0 end
+ redis.call('PSETEX',KEYS[2],300000,t+tonumber(ARGV[2]))
+ if ARGV[3]=='1' then redis.call('PSETEX',KEYS[3],300000,t+1000) end
+ return 1
+ LUA;
 
-    private const PAUSE_KEY = 'telegram:rl:paused_until';
+    private float $clockStart;
 
-    public function __construct(private readonly SettingsService $settings) {}
+    public function __construct(private readonly SettingsService $settings)
+    {
+        $this->clockStart = microtime(true);
+    }
+
+    private function clock(): int
+    {
+        return now()->getTimestampMs() + (Carbon::hasTestNow() ? (int) ((microtime(true) - $this->clockStart) * 1000) : 0);
+    }
 
     public function rate(): int
     {
         $ceiling = max(1, (int) config('telegram.send_rate'));
-        $configured = (int) ($this->settings->get('telegram.send_rate') ?? $ceiling);
 
-        return max(1, min($ceiling, $configured));
+        return max(1, min($ceiling, (int) $this->settings->get('telegram.send_rate', $ceiling)));
     }
 
-    /** Non-blocking: consume one send slot in the current one-second window. */
-    public function tryAcquire(): bool
+    public function tryAcquire(?int $chatId = null): bool
     {
-        if ($this->isPaused()) {
-            return false;
-        }
-
-        $key = self::WINDOW_KEY_PREFIX.now()->getTimestamp();
-        $count = (int) Redis::incr($key);
-
-        if ($count === 1) {
-            Redis::expire($key, 3);
-        }
-
-        return $count <= $this->rate();
+        return (bool) Redis::eval(self::ACQUIRE, 3, 'telegram:rl:paused_until', 'telegram:rl:next', 'telegram:rl:chat:'.($chatId ?? 'none'), (string) $this->clock(), (string) (1000 / $this->rate()), $chatId === null ? '0' : '1');
     }
 
-    /** Blocking: wait for a slot; throws if none frees up within the deadline. */
-    public function acquire(int $maxWaitSeconds = 60): void
+    public function acquire(int $maxWaitSeconds = 60, ?int $chatId = null): void
     {
         $deadline = microtime(true) + $maxWaitSeconds;
-
-        while (! $this->tryAcquire()) {
+        while (! $this->tryAcquire($chatId)) {
             if (microtime(true) >= $deadline) {
-                throw new RuntimeException("Telegram rate limiter: no slot within {$maxWaitSeconds}s");
-            }
-
-            usleep(50_000);
+                throw new RuntimeException('Telegram send capacity unavailable');
+            }usleep(50000);
         }
     }
 
-    /** Pause the global bucket, e.g. for a Telegram 429 retry_after. */
     public function pause(int $seconds): void
     {
-        $until = now()->getTimestamp() + max(1, $seconds);
-        $current = (int) (Redis::get(self::PAUSE_KEY) ?? 0);
-
-        if ($until > $current) {
-            Redis::setex(self::PAUSE_KEY, max(1, $seconds) + 1, (string) $until);
-        }
+        Redis::eval("local v=tonumber(redis.call('GET',KEYS[1]) or '0'); if tonumber(ARGV[1])>v then redis.call('PSETEX',KEYS[1],ARGV[2],ARGV[1]) end; return 1", 1, 'telegram:rl:paused_until', (string) ($this->clock() + max(1, $seconds) * 1000), (string) ((max(1, $seconds) + 1) * 1000));
     }
 
     public function isPaused(): bool
     {
-        $until = Redis::get(self::PAUSE_KEY);
-
-        return $until !== null && (int) $until > now()->getTimestamp();
+        return (int) (Redis::get('telegram:rl:paused_until') ?? 0) > $this->clock();
     }
 }

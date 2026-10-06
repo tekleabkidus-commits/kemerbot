@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Broadcasts\Support;
 
+use App\Models\AudienceSegment;
 use App\Models\Broadcast;
 use App\Models\BroadcastButton;
 use App\Models\BroadcastButtonTranslation;
@@ -31,6 +32,13 @@ class BroadcastFormState
 
         if (($state['aud_in_channel'] ?? null) !== null && ($state['aud_in_channel'] ?? '') !== '') {
             $filter['in_channel'] = (bool) $state['aud_in_channel'];
+        }
+
+        if (is_array($state['aud_user_ids'] ?? null)) {
+            $filter['user_ids'] = array_values(array_map('intval', $state['aud_user_ids']));
+        }
+        if (! empty($state['segment_id'])) {
+            $filter = [...((AudienceSegment::find($state['segment_id'])?->filter) ?? []), ...$filter];
         }
 
         return $filter === [] ? ['everyone' => true] : $filter;

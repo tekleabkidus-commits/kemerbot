@@ -14,6 +14,9 @@ trait SavesAutomationSteps
 {
     protected function saveSteps(Automation $automation, array $stepsData): void
     {
+        if ($automation->userStates()->where('status', 'active')->exists()) {
+            return;
+        }
         $keptStepNos = [];
 
         foreach (array_values($stepsData) as $index => $row) {
