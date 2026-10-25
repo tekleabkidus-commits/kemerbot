@@ -6,8 +6,10 @@ use App\Models\Broadcast;
 use App\Models\BroadcastButton;
 use App\Models\BroadcastButtonTranslation;
 use App\Models\BroadcastTranslation;
+use App\Models\MediaFile;
 use App\Models\User;
 use App\Services\Broadcasts\BroadcastRenderer;
+use App\Services\Broadcasts\InvalidBroadcastTransition;
 
 $render = fn (Broadcast $broadcast, User $user) => app(BroadcastRenderer::class)->render($broadcast->load('translations', 'buttons.translations'), $user);
 
@@ -30,6 +32,72 @@ it('falls back to english when the amharic translation is missing', function () 
     $amUser = User::factory()->amharic()->create();
 
     expect($render($broadcast, $amUser)->text)->toBe('Only English');
+});
+
+it('keeps Amharic text while falling back to the English image', function () use ($render) {
+    $broadcast = Broadcast::factory()->create();
+    $photo = MediaFile::factory()->create();
+
+    BroadcastTranslation::factory()->for($broadcast)->create([
+        'text' => 'English caption',
+        'media_file_id' => $photo->id,
+    ]);
+    BroadcastTranslation::factory()->for($broadcast)->amharic()->create([
+        'text' => 'የአማርኛ መልእክት',
+        'media_file_id' => null,
+    ]);
+
+    $message = $render($broadcast, User::factory()->amharic()->create());
+
+    expect($message->text)->toBe('የአማርኛ መልእክት')
+        ->and($message->media?->id)->toBe($photo->id);
+});
+
+it('prefers a language-specific image when both translations have media', function () use ($render) {
+    $broadcast = Broadcast::factory()->create();
+    $englishPhoto = MediaFile::factory()->create();
+    $amharicPhoto = MediaFile::factory()->create();
+
+    BroadcastTranslation::factory()->for($broadcast)->create([
+        'text' => 'English caption',
+        'media_file_id' => $englishPhoto->id,
+    ]);
+    BroadcastTranslation::factory()->for($broadcast)->amharic()->create([
+        'text' => 'የአማርኛ መልእክት',
+        'media_file_id' => $amharicPhoto->id,
+    ]);
+
+    $amMessage = $render($broadcast, User::factory()->amharic()->create());
+    $enMessage = $render($broadcast, User::factory()->create());
+
+    expect($amMessage->media?->id)->toBe($amharicPhoto->id)
+        ->and($enMessage->media?->id)->toBe($englishPhoto->id);
+});
+
+it('falls back to English text when the Amharic row has no text', function () use ($render) {
+    $broadcast = Broadcast::factory()->create();
+    BroadcastTranslation::factory()->for($broadcast)->create(['text' => 'English only']);
+    BroadcastTranslation::factory()->for($broadcast)->amharic()->create(['text' => null]);
+
+    expect($render($broadcast, User::factory()->amharic()->create())->text)
+        ->toBe('English only');
+});
+
+it('enforces the media caption length limit for a fallback photo', function () use ($render) {
+    $broadcast = Broadcast::factory()->create();
+    $photo = MediaFile::factory()->create();
+
+    BroadcastTranslation::factory()->for($broadcast)->create([
+        'text' => str_repeat('x', 1025),
+        'media_file_id' => $photo->id,
+    ]);
+    BroadcastTranslation::factory()->for($broadcast)->amharic()->create([
+        'text' => str_repeat('y', 1025),
+        'media_file_id' => null,
+    ]);
+
+    expect(fn () => $render($broadcast, User::factory()->amharic()->create()))
+        ->toThrow(InvalidBroadcastTransition::class, 'Rendered message is too long');
 });
 
 it('personalizes tokens and blanks unknown ones', function () use ($render) {

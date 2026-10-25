@@ -36,10 +36,16 @@ final class BroadcastRenderer
     public function renderForLanguage(Broadcast $broadcast, BotLanguage $lang, User $user): RenderedMessage
     {
         $translation = $this->locale->pickTranslation($broadcast->translations, $lang);
+        $english = $broadcast->translations->firstWhere('lang', BotLanguage::En);
+
+        // Message language and media language can fall back independently.
+        // An Amharic text translation does not require a separate photo upload.
+        $body = filled($translation?->text) ? $translation->text : $english?->text;
+        $media = $translation?->mediaFile ?? $english?->mediaFile;
 
         $text = match ($broadcast->type) {
-            BroadcastType::MatchCard => $this->matchCardCaption($broadcast, $translation?->text, $lang),
-            default => $translation?->text,
+            BroadcastType::MatchCard => $this->matchCardCaption($broadcast, $body, $lang),
+            default => $body,
         };
 
         if (($broadcast->delivery_variant ?? 'a') === 'b') {
@@ -50,13 +56,13 @@ final class BroadcastRenderer
             $text = $this->tokens->renderForUser($text, $user);
         }
 
-        if (mb_strlen($text ?? '') > ($translation?->mediaFile ? 1024 : 4096)) {
+        if (mb_strlen($text ?? '') > ($media ? 1024 : 4096)) {
             throw new InvalidBroadcastTransition('Rendered message is too long');
         }
 
         return new RenderedMessage(
             text: $text,
-            media: $translation?->mediaFile,
+            media: $media,
             replyMarkup: $this->keyboard($broadcast, $lang),
         );
     }
