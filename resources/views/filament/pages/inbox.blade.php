@@ -1,59 +1,80 @@
 <x-filament-panels::page>
-    <div class="kb-inbox-layout {{ $selectedUser ? 'kb-chat-has-selection' : '' }}">
-        <aside class="kb-chat-list-panel" aria-label="Conversations">
-            <div class="kb-chat-list-heading">
-                <div>
-                    <h2>Inbox</h2>
-                    <p>{{ $people->count() }} conversations shown</p>
-                </div>
-                <span class="kb-chat-heading-icon" aria-hidden="true">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h11"/></svg>
-                </span>
-            </div>
-            <div class="kb-chat-controls">
-                <label class="sr-only" for="kb-inbox-search">Search conversations</label>
-                <input id="kb-inbox-search" type="search" wire:model.live.debounce.350ms="search" placeholder="Search conversations…">
-                <label class="sr-only" for="kb-inbox-filter">Conversation status</label>
-                <select id="kb-inbox-filter" wire:model.live="statusFilter">
-                    <option value="active">Active</option>
-                    <option value="closed">Resolved</option>
-                    <option value="all">All</option>
-                </select>
-            </div>
-            <div class="kb-chat-conversation-list">
-                @forelse($people as $person)
-                    @php $latest = $person->telegramMessages->first(); @endphp
-                    <div class="kb-chat-contact {{ $selectedUser?->id === $person->id ? 'is-selected' : '' }}" wire:key="inbox-person-{{ $person->id }}">
-                        <button type="button" wire:click="selectConversation({{ $person->id }})" class="kb-chat-contact-avatar" aria-label="Open conversation with {{ $person->first_name }}">
-                            {{ mb_strtoupper(mb_substr($person->first_name ?: '?', 0, 1)) }}
-                        </button>
-                        <div class="kb-chat-contact-content">
-                            <div class="kb-chat-contact-top">
-                                <a class="kb-chat-contact-name" href="{{ \App\Filament\Resources\Users\UserResource::getUrl('view', ['record' => $person]) }}" title="Open profile">{{ $person->first_name }}</a>
-                                <time>{{ $latest?->sent_at?->diffForHumans(short: true) ?? $person->last_active_at?->diffForHumans(short: true) ?? '—' }}</time>
-                            </div>
-                            <button type="button" class="kb-chat-contact-preview" wire:click="selectConversation({{ $person->id }})" aria-label="Read messages from {{ $person->first_name }}">
-                                <span class="kb-chat-handle">{{ $person->username ? '@'.$person->username : 'Telegram member' }}</span>
-                                <span class="kb-chat-excerpt">{{ $latest ? \Illuminate\Support\Str::limit($latest->text ?: '['.$latest->type.']', 65) : 'Open the conversation' }}</span>
-                            </button>
-                        </div>
-                        @if($person->support_status === 'open')
-                            <span class="kb-chat-active-indicator" title="Needs reply"></span>
-                        @endif
+    <div class="studio-inbox-page">
+        @include('filament.partials.studio-kpis')
+        <div class="studio-inbox-workspace {{ $selectedUser ? 'has-conversation' : '' }} {{ $mobileProfile ? 'show-mobile-profile' : '' }}">
+            <aside class="studio-conversations" aria-label="Conversations">
+                <header class="studio-list-header">
+                    <div><h2>Inbox</h2><p>{{ number_format($people->count()) }} conversations{{ trim($search) !== '' ? ' matching search' : '' }}</p></div>
+                    <div class="studio-list-header-actions">
+                        <label class="studio-field-select">
+                            <span class="sr-only">Conversation status</span>
+                            <select wire:model.live="statusFilter" aria-label="Conversation status">
+                                <option value="all">All</option>
+                                <option value="active">Open</option>
+                                <option value="closed">Resolved</option>
+                            </select>
+                        </label>
+                        <a class="studio-compose-button" href="{{ \App\Filament\Resources\Users\UserResource::getUrl() }}" title="Find a person to message" aria-label="Find a person to message">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="17" height="17" aria-hidden="true"><path d="M13 4H5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-8"/><path d="m12 14 9-9-2-2-9 9-1 3 3-1Z"/></svg>
+                        </a>
                     </div>
-                @empty
-                    <div class="kb-chat-list-empty">No conversations match these filters.</div>
-                @endforelse
-                @if($people->count() >= $conversationLimit && $conversationLimit < 500)
-                    <button class="kb-chat-older" type="button" wire:click="showMoreConversations">Show more conversations</button>
+                </header>
+                <div class="studio-list-search">
+                    <div class="studio-search-wrap">
+                        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
+                        <input type="search" aria-label="Search conversations" wire:model.live.debounce.350ms="search" placeholder="Search conversations…">
+                    </div>
+                    <span class="studio-filter-indicator" title="Filter by status using the selector above">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M3 5h18l-7 8v6l-4-2v-4L3 5Z"/></svg>
+                    </span>
+                </div>
+                <div class="studio-conversation-list" wire:poll.20s>
+                    @forelse($people as $index=>$person)
+                        @php
+                            $last = $person->telegramMessages->first();
+                            $unanswered = (int) ($awaitingReply[$person->id] ?? 0);
+                        @endphp
+                        <article class="studio-conversation-item {{ $selectedUser?->id === $person->id ? 'is-selected' : '' }}" wire:key="person-{{ $person->id }}">
+                            <button class="studio-conversation-open" type="button" wire:click="selectConversation({{ $person->id }})" aria-label="Open conversation with {{ $person->first_name }}">
+                                <span class="studio-avatar studio-avatar-md studio-avatar-variant-{{ $index % 6 }}" aria-hidden="true">{{ mb_strtoupper(mb_substr($person->first_name ?: '?',0,1)) }}</span>
+                            </button>
+                            <div class="studio-conversation-detail">
+                                <div class="studio-conversation-first">
+                                    <a class="studio-conversation-name" href="{{ \App\Filament\Resources\Users\UserResource::getUrl('view', ['record' => $person]) }}" title="Open {{ $person->first_name }}'s profile">{{ $person->first_name }}</a>
+                                    <span class="studio-tag {{ $person->support_status === 'closed' ? 'neutral' : 'green' }}">{{ $person->support_status === 'closed' ? 'Resolved' : ucfirst($person->support_status) }}</span>
+                                    <time>{{ $last?->sent_at?->diffForHumans(short:true) ?? $person->last_active_at?->diffForHumans(short:true) ?? '—' }}</time>
+                                </div>
+                                <button type="button" class="studio-conversation-excerpt" wire:click="selectConversation({{ $person->id }})" aria-label="Show messages from {{ $person->first_name }}">
+                                    {{ $last ? \Illuminate\Support\Str::limit($last->text ?: '['.ucfirst($last->type).' message]', 68) : 'No messages yet' }}
+                                </button>
+                            </div>
+                            @if($unanswered > 0)
+                                <span class="studio-unanswered-count" title="{{ $unanswered }} inbound message{{ $unanswered === 1 ? '' : 's' }} awaiting reply">{{ $unanswered > 99 ? '99+' : $unanswered }}</span>
+                            @endif
+                        </article>
+                    @empty
+                        <div class="studio-list-empty"><span aria-hidden="true">◌</span><strong>No conversations found</strong><p>Try adjusting the status or search to see more people.</p></div>
+                    @endforelse
+                    @if($people->count() >= $conversationLimit && $conversationLimit < 500)
+                        <button class="studio-more-conversations" type="button" wire:click="showMoreConversations">Load more conversations</button>
+                    @endif
+                </div>
+            </aside>
+            <section class="studio-thread-panel" aria-label="Conversation">
+                @if($selectedUser)
+                    <div class="studio-mobile-controls">
+                        <button type="button" wire:click="backToList">← Inbox</button>
+                        <button type="button" wire:click="showMobileProfile">View profile →</button>
+                    </div>
                 @endif
+                @include('filament.partials.conversation-thread', ['user'=>$selectedUser,'messages'=>$messages,'editableTabs'=>true])
+            </section>
+            <div class="studio-profile-panel">
+                @if($selectedUser)
+                    <button class="studio-mobile-profile-back" type="button" wire:click="showMobileChat">← Back to conversation</button>
+                @endif
+                @include('filament.partials.studio-profile', ['user'=>$selectedUser,'editableTabs'=>true,'recentActivity'=>$recentActivity,'recentCampaigns'=>$recentCampaigns])
             </div>
-        </aside>
-        <section class="kb-chat-thread-panel" aria-label="Selected chat">
-            @if($selectedUser)
-                <button type="button" class="kb-chat-mobile-back" wire:click="backToList">← All conversations</button>
-            @endif
-            @include('filament.partials.conversation-thread', ['user' => $selectedUser, 'messages' => $messages])
-        </section>
+        </div>
     </div>
 </x-filament-panels::page>

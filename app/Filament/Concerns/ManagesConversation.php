@@ -47,6 +47,13 @@ trait ManagesConversation
         $this->messageLimit = min(500, $this->messageLimit + 60);
     }
 
+    public function appendEmoji(): void
+    {
+        $user = $this->conversationUser();
+        abort_unless($user !== null && auth()->user()?->can('message', $user), 403);
+        $this->reply = mb_substr($this->reply, 0, 3998).' 🙂';
+    }
+
     public function submitReply(): void
     {
         $user = $this->conversationUser();

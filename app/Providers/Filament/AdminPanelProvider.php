@@ -31,7 +31,8 @@ class AdminPanelProvider extends PanelProvider
             ->multiFactorAuthentication([AppAuthentication::make()], isRequired: fn () => ! app()->environment(['local', 'testing']))
             ->brandName('KemerBet Studio')->brandLogo(fn () => view('filament.brand'))->brandLogoHeight('40px')
             ->homeUrl(fn () => Home::getUrl())->sidebarWidth('240px')->sidebarCollapsibleOnDesktop()
-            ->renderHook('panels::head.end', fn () => new HtmlString('<link rel="stylesheet" href="'.asset('css/kemer-workspace.css').'"><link rel="stylesheet" href="'.asset('css/kemer-chat.css').'"><link rel="stylesheet" href="'.asset('css/kemer-2026.css').'?v=20261027">'))
+            ->renderHook('panels::head.end', fn () => new HtmlString('<link rel="stylesheet" href="'.asset('css/kemer-workspace.css').'"><link rel="stylesheet" href="'.asset('css/kemer-chat.css').'"><link rel="stylesheet" href="'.asset('css/kemer-2026.css').'?v=20261027"><link rel="stylesheet" href="'.asset('css/studio-reference.css').'?v=20261027b">'))
+            ->renderHook('panels::topbar.start', fn () => new HtmlString(view('filament.partials.studio-utilitybar')->render()))
             ->renderHook('panels::body.end', fn () => new HtmlString(view('filament.mobile-nav')->render()))
             ->colors([
                 'primary' => Color::Emerald,
