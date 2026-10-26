@@ -446,3 +446,21 @@ body.fi-body{background:#f4faf7!important;color:var(--studio-ink)!important}
 .studio-report-note{font-size:10.5px;color:#8e9aa7;line-height:1.5;padding:14px 0 2px}
 @media(max-width:1050px){.studio-report-visuals{grid-template-columns:1fr}}
 @media(max-width:767px){.studio-report-tabs{width:100%;overflow-x:auto;flex-wrap:nowrap}.studio-report-tabs a{white-space:nowrap;padding-inline:10px}.studio-report-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.studio-report-bar-row{grid-template-columns:95px minmax(70px,1fr) 46px;gap:7px}}
+
+/* Mobile reference: Home, Inbox, People, Calendar, More with usable navigation drawer. */
+.ks-mobile-nav>details.studio-mobile-more{display:flex;flex:1;min-width:0;align-items:stretch;position:relative}
+.ks-mobile-nav>details.studio-mobile-more>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;flex:1;min-height:49px;border-radius:11px;color:#85958a;font-size:9px;font-weight:660}
+.ks-mobile-nav>details.studio-mobile-more>summary::-webkit-details-marker{display:none}
+.ks-mobile-nav>details.studio-mobile-more>summary svg{height:20px;width:20px}
+.ks-mobile-nav>details.studio-mobile-more[open]>summary{color:#176b4c;background:#e7f6eb}
+.studio-mobile-more-menu{display:none}
+@media(max-width:767px){
+ .studio-mobile-more-menu{position:fixed;display:flex;flex-direction:column;bottom:calc(74px + env(safe-area-inset-bottom));right:8px;left:8px;max-height:min(490px,65dvh);overflow-y:auto;border:1px solid #e0ece5;border-radius:15px;background:#fff;padding:13px 12px;box-shadow:0 -10px 35px #063a2522;z-index:90}
+ .studio-mobile-more:not([open]) .studio-mobile-more-menu{display:none}
+ .studio-mobile-more-menu h3{font-size:13px;font-weight:760;color:#174733;padding:10px 11px 14px;border-bottom:1px solid #edf1ee}
+ .studio-mobile-more-menu a{display:block;padding:12px 13px;text-decoration:none;color:#375447;font-size:12px;font-weight:650;border-radius:9px}
+ .studio-mobile-more-menu a:hover{background:#eaf7ee;color:#08734e}
+}
+.kb-logo{color:#005e3f!important;font-size:20px!important;gap:10px!important;letter-spacing:-.7px!important;white-space:nowrap}
+.kb-logo span{background:linear-gradient(150deg,#00613f,#164b39)!important;border-radius:11px!important;width:38px!important;height:38px!important;font-size:24px!important}
+.kb-logo small{font-size:9px!important;letter-spacing:.14em!important;color:#819889!important;font-weight:600!important}

@@ -1,7 +1,7 @@
 <x-filament-panels::page>
 <div class="studio-reports">
     <header class="studio-section-heading">
-        <div><h2>Reports / Analytics</h2><p>Turn real campaign and audience activity into better decisions.</p></div>
+        <div><h2>Reports / Analytics</h2><p>Understand your impact. Turn real campaign and audience activity into better decisions.</p></div>
         <div class="studio-period-selector" role="group" aria-label="Report period">
             @foreach([7,30,90] as $days)
                 <button type="button" wire:click="setPeriod({{ $days }})" wire:loading.attr="disabled" class="{{ $period === $days ? 'is-active' : '' }}">{{ $days }}D</button>
