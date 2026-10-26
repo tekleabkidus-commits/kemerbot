@@ -1,0 +1,51 @@
+name: Verify KemerBet Studio
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  php-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: kemerbot_test
+          POSTGRES_USER: kemerbot
+          POSTGRES_PASSWORD: kemerbot
+        ports:
+          - 5445:5432
+        options: >-
+          --health-cmd "pg_isready -U kemerbot -d kemerbot_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7
+        ports:
+          - 6381:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: PHP with PostgreSQL and Redis
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, pdo_pgsql, pgsql, redis, intl, zip, gd, bcmath
+          coverage: none
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+      - name: Prepare Laravel
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Validate PHP files
+        run: find app tests database/migrations -name '*.php' -print0 | xargs -0 -n1 php -l > /dev/null
+      - name: Run Pest suite
+        run: ./vendor/bin/pest --compact

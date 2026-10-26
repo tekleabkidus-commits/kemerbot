@@ -1,93 +1,93 @@
 <x-filament-panels::page>
-    @php
-        $sentTotal = $campaigns->sum('sent');
-        $queuedTotal = $campaigns->sum('queued');
-        $clickTotal = $clicks->sum('taps');
-        $uniqueClicks = $clicks->sum('people');
-        $conversionTotal = $conversions->sum('total');
-        $maxSent = max(1, (int) $campaigns->max('sent'));
-    @endphp
-    <div class="ks-page">
-        <header class="ks-page-head">
-            <div><span class="ks-eyebrow">PERFORMANCE & ANALYTICS</span><h2 class="ks-heading">Understand your impact.</h2><p class="ks-subtitle">Delivery, engagement and conversion results from your 30 most recent campaigns.</p></div>
-            <div class="ks-page-actions"><a class="ks-action" href="{{ \App\Filament\Resources\Broadcasts\BroadcastResource::getUrl() }}">All campaigns</a></div>
-        </header>
-        <section class="ks-stats-grid" aria-label="Campaign performance overview">
-            @foreach([
-                ['Messages sent', $sentTotal, 'Across recent campaigns', '↗'],
-                ['Unique clickers', $uniqueClicks, 'Summed across campaigns', '◉'],
-                ['Button taps', $clickTotal, 'All tracked interactions', '⌁'],
-                ['Conversions', $conversionTotal, 'Reported through integrations', '✓']
-            ] as [$label,$value,$detail,$icon])
-                <article class="ks-stat"><div class="ks-stat-head"><span class="ks-stat-icon">{{ $icon }}</span><span>{{ $label }}</span></div><strong class="ks-stat-number">{{ number_format($value) }}</strong><span class="ks-stat-detail">{{ $detail }}</span></article>
+<div class="studio-reports">
+    <header class="studio-section-heading">
+        <div><h2>Reports / Analytics</h2><p>Turn real campaign and audience activity into better decisions.</p></div>
+        <div class="studio-period-selector" role="group" aria-label="Report period">
+            @foreach([7,30,90] as $days)
+                <button type="button" wire:click="setPeriod({{ $days }})" wire:loading.attr="disabled" class="{{ $period === $days ? 'is-active' : '' }}">{{ $days }}D</button>
             @endforeach
-        </section>
-        <div class="ks-grid">
-            <section class="ks-panel ks-panel-pad ks-span-8">
-                <div class="ks-panel-header"><div><h3>Campaign delivery</h3><p>Sent volume for your most recent campaigns</p></div><span class="ks-chip">{{ $campaigns->count() }} campaigns</span></div>
-                @forelse($campaigns->take(8) as $campaign)
-                    <div class="ks-list-row">
-                        <span class="ks-list-avatar" aria-hidden="true">↗</span>
-                        <span class="ks-list-content"><strong>{{ $campaign->name ?: 'Campaign #'.$campaign->id }}</strong><small>{{ ucfirst($campaign->status->value) }} · {{ number_format($campaign->queued) }} queued</small></span>
-                        <div style="flex:0 1 34%;min-width:75px">
-                            <div class="ks-progress" role="progressbar" aria-label="{{ $campaign->name ?: 'Campaign #'.$campaign->id }} sent volume" aria-valuenow="{{ $campaign->sent }}" aria-valuemin="0" aria-valuemax="{{ $maxSent }}"><span style="width:{{ min(100, 100 * $campaign->sent / $maxSent) }}%"></span></div>
-                        </div>
-                        <strong style="font-size:12px;min-width:54px;text-align:right">{{ number_format($campaign->sent) }}</strong>
-                    </div>
-                @empty
-                    <div class="ks-empty"><span class="symbol">▥</span><h4>No delivery data yet</h4><p>Send a campaign to populate this report.</p></div>
-                @endforelse
-            </section>
-            <section class="ks-panel ks-panel-pad ks-span-4">
-                <div class="ks-panel-header"><div><h3>Engagement snapshot</h3><p>Within the selected recent campaigns</p></div></div>
-                <div style="display:grid;gap:13px">
-                    <div class="ks-insight"><strong>{{ $sentTotal ? number_format(100 * $uniqueClicks / $sentTotal, 1) : '0.0' }}% · unique-clicker ratio</strong>Unique clickers divided by messages sent. People may appear in multiple campaigns.</div>
-                    <div class="ks-insight" style="background:#f8f7fd;border-color:#e6e1f5;color:#5f5480"><strong style="color:#69539b">{{ $clickTotal ? number_format(100 * $conversionTotal / $clickTotal, 1) : '0.0' }}% · conversion-to-tap ratio</strong>Reported conversions compared with tracked taps. Different events may be counted more than once.</div>
-                    <p style="font-size:11px;color:#7e9083;line-height:1.65">Conversion events require your business system to submit authenticated, verified records. These metrics never infer sales or revenue.</p>
-                </div>
-            </section>
         </div>
-        <section class="ks-panel ks-panel-pad">
-            <div class="ks-panel-header"><div><h3>Campaign performance</h3><p>Delivery and engagement details · newest first</p></div></div>
-            <div class="ks-table-scroll">
-                <table class="ks-table">
-                    <thead><tr><th>Campaign</th><th>Status</th><th class="num">Queued</th><th class="num">Sent</th><th class="num">Unique clickers</th><th class="num">Total taps</th><th class="num">Conversions</th></tr></thead>
-                    <tbody>
-                    @forelse($campaigns as $campaign)
-                        <tr>
-                            <td><strong>{{ $campaign->name ?: 'Campaign #'.$campaign->id }}</strong></td>
-                            <td><span class="ks-chip {{ in_array($campaign->status->value, ['sending','preparing','scheduled']) ? 'amber' : (in_array($campaign->status->value,['cancelled','failed']) ? 'rose' : '') }}">{{ ucfirst($campaign->status->value) }}</span></td>
-                            <td class="num">{{ number_format($campaign->queued) }}</td>
-                            <td class="num">{{ number_format($campaign->sent) }}</td>
-                            <td class="num">{{ number_format($clicks[$campaign->id]->people ?? 0) }}</td>
-                            <td class="num">{{ number_format($clicks[$campaign->id]->taps ?? 0) }}</td>
-                            <td class="num">{{ number_format($conversions[$campaign->id]->total ?? 0) }}</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="7">Campaign performance will appear after the first broadcast.</td></tr>
-                    @endforelse
-                    </tbody>
-                </table>
+    </header>
+    <nav class="studio-report-tabs" aria-label="Report sections">
+        <a class="is-active" href="#studio-report-overview">Overview</a>
+        <a href="#studio-report-engagement">Engagement</a>
+        <a href="#studio-report-campaigns">Campaigns</a>
+        <a href="#studio-report-experiments">Experiments</a>
+    </nav>
+    <section class="studio-kpis studio-report-stats" id="studio-report-overview" aria-label="Reporting overview">
+        @foreach([
+            ['Total Users', $totalUsers, 'All recorded Telegram members', '♧'],
+            ['Active Users', $activeUsers, 'Active in selected period', '◉'],
+            ['Messages Sent', $sentTotal, 'Across campaigns created in period', '➤'],
+            ['Campaign CTR', $ctr === null ? '—' : $ctr.'%', 'Summed unique clickers divided by sent messages', '▥']
+        ] as [$label,$value,$hint,$icon])
+            <article class="studio-kpi"><span class="studio-kpi-icon" aria-hidden="true">{{ $icon }}</span><div class="studio-kpi-copy"><span class="studio-kpi-label">{{ $label }}</span><strong class="studio-kpi-value" title="{{ $hint }}">{{ is_numeric($value) ? number_format($value) : $value }}</strong></div></article>
+        @endforeach
+    </section>
+    <div class="studio-report-visuals" id="studio-report-engagement">
+        <section class="studio-dashboard-card">
+            <header><div><h3>User Growth</h3><p>New members and campaign deliveries · {{ $period }} days</p></div><div class="studio-chart-legend"><span class="studio-legend-blue"></span>New users<span class="studio-legend-green"></span>Sent</div></header>
+            <div class="studio-chart-container" role="img" aria-label="Real audience growth and message delivery chart">
+                <div class="studio-chart-vertical-labels"><span>{{ number_format($chartMax) }}</span><span>0</span></div>
+                <svg viewBox="0 0 720 185" preserveAspectRatio="none" aria-hidden="true">
+                    <line x1="0" x2="720" y1="18" y2="18" stroke="#e7eff0" stroke-dasharray="3 5"/>
+                    <line x1="0" x2="720" y1="91" y2="91" stroke="#e7eff0" stroke-dasharray="3 5"/>
+                    <line x1="0" x2="720" y1="170" y2="170" stroke="#e7eff0"/>
+                    <polyline points="{{ $joiningLine }}" fill="none" stroke="#3988e5" stroke-width="2.5" stroke-linejoin="round"/>
+                    <polyline points="{{ $sendingLine }}" fill="none" stroke="#159963" stroke-width="2.5" stroke-linejoin="round"/>
+                </svg>
+                <div class="studio-chart-axis"><span>{{ \Carbon\Carbon::parse(array_key_first($joins))->format('M d') }}</span><span>{{ now()->timezone(config('app.display_timezone'))->format('M d') }}</span></div>
             </div>
         </section>
-        <section class="ks-panel ks-panel-pad">
-            <div class="ks-panel-header"><div><h3>Experiments & holdouts</h3><p>Compare actual audience cohorts, conversions and engagement</p></div></div>
-            <div class="ks-table-scroll">
-                <table class="ks-table">
-                    <thead><tr><th>Campaign</th><th>Variant</th><th class="num">Audience</th><th class="num">Sent</th><th class="num">Clickers</th><th class="num">Converted</th><th class="num">Conversion rate</th></tr></thead>
-                    <tbody>
-                    @forelse($experiments as $experiment)
-                        <tr>
-                            <td>#{{ $experiment->broadcast_id }}</td><td><span class="ks-chip slate">{{ strtoupper($experiment->cohort) }}</span></td><td class="num">{{ number_format($experiment->audience) }}</td><td class="num">{{ number_format($experiment->sent) }}</td>
-                            <td class="num">{{ number_format($experiment->clickers) }}</td><td class="num">{{ number_format($experiment->converted) }}</td>
-                            <td class="num">{{ $experiment->audience ? number_format(100 * $experiment->converted / $experiment->audience, 1) : '0.0' }}%</td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="7">No A/B results yet. Create a campaign with an alternative message or holdout group.</td></tr>
-                    @endforelse
-                    </tbody>
-                </table>
+        <section class="studio-dashboard-card">
+            <header><div><h3>Campaign Performance</h3><p>Sent message volume by campaign</p></div></header>
+            <div class="studio-report-bars">
+                @php $highest = max(1, (int)$campaigns->max('sent')); @endphp
+                @forelse($campaigns->take(5) as $campaign)
+                    <div class="studio-report-bar-row">
+                        <span title="{{ $campaign->name ?: 'Campaign #'.$campaign->id }}">{{ \Illuminate\Support\Str::limit($campaign->name ?: 'Campaign #'.$campaign->id, 19) }}</span>
+                        <div><span style="width:{{ round(100 * $campaign->sent/$highest) }}%"></span></div>
+                        <strong>{{ number_format($campaign->sent) }}</strong>
+                    </div>
+                @empty
+                    <div class="studio-dashboard-empty"><strong>No campaigns in this period</strong><p>Send a campaign to see its delivery volume.</p></div>
+                @endforelse
             </div>
         </section>
     </div>
+    <section class="studio-dashboard-card" id="studio-report-campaigns">
+        <header><div><h3>Top Campaigns</h3><p>Reach, engagement and conversions from your recorded delivery results</p></div></header>
+        <div class="studio-report-table-wrap"><table class="studio-report-table">
+            <thead><tr><th>Campaign</th><th>Status</th><th>Sent</th><th>Unique clickers</th><th>Total taps</th><th>Conversions</th></tr></thead>
+            <tbody>
+                @forelse($campaigns as $campaign)
+                    <tr>
+                        <td>{{ $campaign->name ?: 'Campaign #'.$campaign->id }}</td>
+                        <td><span class="studio-tag {{ $campaign->status->value === 'completed' ? 'green' : 'neutral' }}">{{ ucfirst($campaign->status->value) }}</span></td>
+                        <td>{{ number_format($campaign->sent) }}</td>
+                        <td>{{ number_format($clicks[$campaign->id]->people ?? 0) }}</td>
+                        <td>{{ number_format($clicks[$campaign->id]->taps ?? 0) }}</td>
+                        <td>{{ number_format($conversions[$campaign->id]->total ?? 0) }}</td>
+                    </tr>
+                @empty
+                    <tr><td colspan="6">No campaign results recorded in this period.</td></tr>
+                @endforelse
+            </tbody>
+        </table></div>
+    </section>
+    <section class="studio-dashboard-card" id="studio-report-experiments">
+        <header><div><h3>Experiment results</h3><p>A/B variants and holdouts are counted only when real experiment assignments exist.</p></div></header>
+        <div class="studio-report-table-wrap"><table class="studio-report-table">
+            <thead><tr><th>Campaign</th><th>Group</th><th>Audience</th><th>Sent</th><th>Clickers</th><th>Converted</th><th>Conversion rate</th></tr></thead>
+            <tbody>
+                @forelse($experiments as $experiment)
+                    <tr><td>#{{ $experiment->broadcast_id }}</td><td>{{ strtoupper($experiment->cohort) }}</td><td>{{ $experiment->audience }}</td><td>{{ $experiment->sent }}</td><td>{{ $experiment->clickers }}</td><td>{{ $experiment->converted }}</td><td>{{ $experiment->audience ? number_format(100 * $experiment->converted/$experiment->audience,1) : '0.0' }}%</td></tr>
+                @empty
+                    <tr><td colspan="7">No experiment data yet. Add an alternative message or holdout when composing a campaign.</td></tr>
+                @endforelse
+            </tbody>
+        </table></div>
+        <p class="studio-report-note">Unique clickers are summed per campaign; the same person can appear in multiple campaigns. Conversions require verified integration events.</p>
+    </section>
+</div>
 </x-filament-panels::page>

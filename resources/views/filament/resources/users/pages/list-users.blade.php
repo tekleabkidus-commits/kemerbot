@@ -15,7 +15,7 @@
                         </button>
                     @endforeach
                 </div>
-                {{ $this->table }}
+                {{ $this->content }}
             </section>
             <div class="studio-people-side">
                 @include('filament.partials.studio-profile', ['user'=>$previewUser,'editableTabs'=>false,'recentActivity'=>collect(),'recentCampaigns'=>collect()])

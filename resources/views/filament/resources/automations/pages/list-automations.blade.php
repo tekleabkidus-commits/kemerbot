@@ -54,6 +54,6 @@
             @endif
         </aside>
     </div>
-    <section class="studio-automation-table"><div><h3>All automation journeys</h3><p>Search, edit, pause and resume from the table below.</p></div>{{ $this->table }}</section>
+    <section class="studio-automation-table"><div><h3>All automation journeys</h3><p>Search, edit, pause and resume from the table below.</p></div>{{ $this->content }}</section>
 </div>
 </x-filament-panels::page>

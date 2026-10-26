@@ -4,7 +4,7 @@
             <div><h2>Campaigns</h2><p>Create and manage campaigns across your Telegram audience.</p></div>
             <a class="studio-cta" href="{{ \App\Filament\Resources\Broadcasts\BroadcastResource::getUrl('create') }}">＋ New Campaign</a>
         </header>
-        <div class="studio-campaign-table">{{ $this->table }}</div>
+        <div class="studio-campaign-table">{{ $this->content }}</div>
         <div class="studio-campaign-builder">
             <div class="studio-campaign-form-illustration">
                 <div class="studio-campaign-builder-title">
