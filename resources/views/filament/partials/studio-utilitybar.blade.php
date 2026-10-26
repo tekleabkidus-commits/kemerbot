@@ -2,7 +2,7 @@
     <form class="studio-global-search" method="get" action="{{ \App\Filament\Resources\Users\UserResource::getUrl() }}" role="search">
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
         <label class="sr-only" for="studio-global-search-input">Search people</label>
-        <input id="studio-global-search-input" type="search" name="tableSearch" placeholder="Search people by name, username or ID…" autocomplete="off">
+        <input id="studio-global-search-input" type="search" name="search" placeholder="Search people by name, username or ID…" autocomplete="off">
         <button type="submit" aria-label="Search people">Search</button>
     </form>
     <a class="studio-top-date" href="{{ \App\Filament\Pages\Calendar::getUrl() }}" title="Open campaign calendar">

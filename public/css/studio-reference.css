@@ -464,3 +464,64 @@ body.fi-body{background:#f4faf7!important;color:var(--studio-ink)!important}
 .kb-logo{color:#005e3f!important;font-size:20px!important;gap:10px!important;letter-spacing:-.7px!important;white-space:nowrap}
 .kb-logo span{background:linear-gradient(150deg,#00613f,#164b39)!important;border-radius:11px!important;width:38px!important;height:38px!important;font-size:24px!important}
 .kb-logo small{font-size:9px!important;letter-spacing:.14em!important;color:#819889!important;font-weight:600!important}
+
+/* Platform-wide form, table and secondary-page consistency. */
+.fi-sc-section,.fi-section{border-color:#e8eef0!important;border-radius:12px!important;background:#fff!important;box-shadow:var(--studio-shadow)!important}
+.fi-sc-section-header-heading,.fi-section-header-heading{color:#1b2a41!important;font-size:13px!important;font-weight:745!important}
+.fi-sc-section-header-description,.fi-section-header-description{color:#8291a6!important;font-size:11px!important;line-height:1.6!important}
+.fi-fo-field-wrp-label label{font-size:11.5px!important;color:#293952!important;font-weight:700!important}
+.fi-fo-field-wrp-helper-text{color:#8592a5!important;font-size:10.5px!important;line-height:1.65!important}
+.fi-fo-field-wrp-error-message{font-size:10.5px!important;color:#bf3d42!important}
+.fi-input-wrp{border-color:#dfe8eb!important;border-radius:9px!important;min-height:40px!important}
+.fi-input,.fi-select-input,.fi-textarea{color:#2a3b50!important;font-size:12px!important}
+.fi-input::placeholder,.fi-textarea::placeholder{color:#a1acbd!important}
+.fi-fo-file-upload .filepond--panel-root{background:#f8fbf8!important;border:1px dashed #acd8bf!important;border-radius:12px!important}
+.fi-sc-wizard-header{border-color:#e4eee8!important;border-radius:11px!important;box-shadow:none!important}
+.fi-sc-wizard-step-label{font-size:11px!important;font-weight:720!important;color:#37506b!important}
+.fi-sc-wizard-step-description{font-size:9.5px!important;color:#8798a9!important}
+.fi-sc-wizard-step-icon-ctn{border-color:#b9dfca!important}
+.fi-fo-repeater-item{border:1px solid #e7eef0!important;border-radius:11px!important;box-shadow:none!important}
+.fi-tabs{border-color:#e8eef0!important}
+.fi-tabs-item{font-weight:650!important;font-size:11px!important}
+.fi-ta-header-cell{font-size:10px!important;color:#75859b!important}
+.fi-ta-cell{font-size:11px!important}
+.fi-ta-row{min-height:60px!important}
+.fi-ta-filters-above-content{background:#fff!important}
+.fi-badge{border-radius:999px!important;font-size:10px!important}
+.fi-btn{border-radius:9px!important;font-size:11.5px!important;font-weight:700!important}
+.fi-btn-color-primary{background:#006e49!important}
+.fi-btn-color-primary:hover{background:#005638!important}
+.fi-modal-window{border-radius:16px!important;box-shadow:0 20px 65px #0e3e2c22!important}
+.fi-modal-heading{font-weight:750!important;letter-spacing:-.35px!important}
+.fi-no-notification{border-radius:11px!important}
+.fi-pagination-item-button{border-radius:8px!important}
+.ks-page .ks-panel,.ks-page .ks-stat{border-color:#e7edf0!important;border-radius:12px!important;background:#fff!important;box-shadow:var(--studio-shadow)!important}
+.ks-page .ks-heading{font-size:clamp(22px,2.1vw,28px)!important;letter-spacing:-.8px!important;color:#17243a!important}
+.ks-page .ks-subtitle{color:#8492a6!important;font-size:11.5px!important}
+.ks-page .ks-panel-header h3{font-size:14px!important;color:#192a42!important}
+.ks-page .ks-stat-number{color:#19223a!important;font-size:30px!important}
+.ks-page .ks-stat-icon{background:#e1f7ea!important;color:#00764c!important}
+.ks-page .ks-table th{background:#f8faf9!important;color:#728399!important}
+.ks-page .ks-table td{border-color:#ebf0f0!important}
+.ks-page .ks-chip{font-size:10px!important}
+.ks-page .ks-calendar{border-color:#e8eeed!important}
+.ks-page .ks-calendar-dayname{color:#7b8ba0!important;background:#f7faf9!important}
+.ks-page .ks-calendar-cell{min-height:103px!important;border-color:#edf1f2!important}
+.ks-page .ks-calendar-cell time{font-size:11px!important;color:#526278!important}
+.ks-page .ks-calendar-event{background:#e6f7ed!important;color:#05784f!important}
+.ks-page .ks-calendar-event:nth-of-type(3n){background:#ebedff!important;color:#5e69b4!important}
+.ks-page .ks-form-actions{border-color:#e6edf0!important;border-radius:11px!important}
+.ks-page .ks-form-actions p{color:#8293a8!important}
+.fi-ta-empty-state-icon-ctn{background:#e8f8ee!important}
+.fi-ta-empty-state-heading{color:#24384c!important}
+.fi-ta-empty-state-description{color:#8291a1!important}
+@media(max-width:767px){
+ .fi-sc-wizard-header{padding:9px!important}
+ .fi-sc-wizard-step-label{font-size:10px!important}
+ .fi-sc-wizard-step-description{display:none!important}
+ .fi-fo-repeater-item{padding:10px!important}
+ .fi-ta-cell{font-size:10.5px!important}
+ .fi-sc-section-header-heading{font-size:12px!important}
+ .ks-page .ks-calendar-wrap{overflow-x:auto}
+ .ks-page .ks-calendar{min-width:770px}
+}
