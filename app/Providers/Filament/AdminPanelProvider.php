@@ -31,7 +31,7 @@ class AdminPanelProvider extends PanelProvider
             ->multiFactorAuthentication([AppAuthentication::make()], isRequired: fn () => ! app()->environment(['local', 'testing']))
             ->brandName('KemerBet Studio')->brandLogo(fn () => view('filament.brand'))->brandLogoHeight('40px')
             ->homeUrl(fn () => Home::getUrl())->sidebarWidth('240px')->sidebarCollapsibleOnDesktop()
-            ->renderHook('panels::head.end', fn () => new HtmlString('<link rel="stylesheet" href="'.asset('css/kemer-workspace.css').'">'))
+            ->renderHook('panels::head.end', fn () => new HtmlString('<link rel="stylesheet" href="'.asset('css/kemer-workspace.css').'"><link rel="stylesheet" href="'.asset('css/kemer-chat.css').'">'))
             ->colors([
                 'primary' => Color::Emerald,
             ])

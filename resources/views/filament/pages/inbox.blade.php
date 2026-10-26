@@ -1,7 +1,4 @@
 <x-filament-panels::page>
-    @once
-        <link rel="stylesheet" href="{{ asset('css/kemer-chat.css') }}">
-    @endonce
     <div class="kb-inbox-layout {{ $selectedUser ? 'kb-chat-has-selection' : '' }}">
         <aside class="kb-chat-list-panel" aria-label="Conversations">
             <div class="kb-chat-list-heading">

@@ -1,7 +1,4 @@
 <x-filament-panels::page>
-    @once
-        <link rel="stylesheet" href="{{ asset('css/kemer-chat.css') }}">
-    @endonce
     <div class="kb-profile-heading">
         <a class="kb-profile-return" href="{{ \App\Filament\Resources\Users\UserResource::getUrl() }}">← Back to people</a>
         <div class="kb-profile-heading-title">
