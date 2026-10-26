@@ -42,26 +42,50 @@ final class StudioMetrics
         ];
     }
 
-    /** Actual send volume for the last seven Addis calendar days; used for charts. */
-    public function deliveryTrend(): array
+    /** Additive, actual Telegram campaign deliveries, bucketed in Addis time. */
+    public function deliveryTrend(int $days = 7): array
     {
+        $days = max(1, min(90, $days));
         $tz = config('app.display_timezone', 'Africa/Addis_Ababa');
-        $start = CarbonImmutable::now($tz)->subDays(6)->startOfDay();
+        $start = CarbonImmutable::now($tz)->subDays($days - 1)->startOfDay();
+        $grouped = DB::table('broadcast_recipients')
+            ->where('status', 'sent')
+            ->where('sent_at', '>=', $start->utc())
+            ->selectRaw("(sent_at AT TIME ZONE 'UTC' AT TIME ZONE ?)::date as day, count(*) as total", [$tz])
+            ->groupBy('day')
+            ->pluck('total', 'day');
 
-        $days = [];
+        $series = [];
 
-        for ($i = 0; $i < 7; $i++) {
-            $local = $start->addDays($i);
-            $from = $local->utc();
-            $to = $local->addDay()->utc();
+        for ($i = 0; $i < $days; $i++) {
+            $day = $start->addDays($i);
 
-            $days[] = [
-                'date' => $local->format('D'),
-                'count' => DB::table('broadcast_recipients')->where('status', 'sent')->where('sent_at', '>=', $from)->where('sent_at', '<', $to)->count(),
+            $series[] = [
+                'key' => $day->toDateString(),
+                'date' => $day->format('M j'),
+                'count' => (int) ($grouped[$day->toDateString()] ?? 0),
             ];
         }
 
-        return $days;
+        return $series;
+    }
+
+    public function chartPoints(array $values, int $height = 170, int $width = 720, ?int $commonMax = null): string
+    {
+        $values = array_values(array_map('intval', $values));
+
+        if (count($values) === 0) {
+            return '';
+        }
+
+        $max = max(1, $commonMax ?? max($values));
+        $count = max(1, count($values) - 1);
+
+        return implode(' ', array_map(
+            fn ($index, $value) => round($index / $count * $width, 2).','.round($height - min(1, $value / $max) * ($height - 12), 2),
+            array_keys($values),
+            $values
+        ));
     }
 
     public function sparkline(array $values): string

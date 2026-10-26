@@ -34,7 +34,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Wizard\Step;
 
 /**
- * The three-step campaign builder: message, audience, review and schedule. Also reused piecemeal by the edit form.
+ * Five-step campaign builder matching the approved UI; the existing sender and validation remain unchanged. Also reused piecemeal by the edit form.
  */
 class BroadcastWizard
 {
@@ -42,9 +42,11 @@ class BroadcastWizard
     public static function steps(): array
     {
         return [
-            Step::make('Your message')->schema([...self::typeStep(), ...self::contentStep(), Section::make('Add buttons')->collapsible()->collapsed()->schema(self::buttonsStep())]),
-            Step::make('Audience')->schema(self::audienceStep()),
-            Step::make('Review & schedule')->schema([...self::timingStep(), ...self::testStep(), ...self::reviewStep()]),
+            Step::make('Details')->description('Name and type')->schema(self::typeStep()),
+            Step::make('Audience')->description('Who receives it')->schema(self::audienceStep()),
+            Step::make('Content')->description('Message and media')->schema([...self::contentStep(), Section::make('Add buttons')->collapsible()->collapsed()->schema(self::buttonsStep())]),
+            Step::make('Schedule')->description('Delivery timing')->schema(self::timingStep()),
+            Step::make('Review')->description('Confirm and test')->schema([...self::testStep(), ...self::reviewStep()]),
         ];
     }
 
