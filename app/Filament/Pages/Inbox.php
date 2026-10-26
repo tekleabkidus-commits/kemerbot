@@ -27,12 +27,12 @@ class Inbox extends Page implements HasTable
     public function table(Table $table): Table
     {
         return $table->query(User::query()->where('support_status', '!=', 'closed'))->columns([
-            TextColumn::make('first_name')->label('Person')->searchable()->description(fn ($r) => $r->username ? '@'.$r->username : 'Telegram member'),
+            TextColumn::make('first_name')->label('Person')->searchable()->description(fn (User $record) => $record->username ? '@'.$record->username : 'Telegram member'),
             TextColumn::make('support_status')->badge()->label('Conversation'),
             TextColumn::make('last_active_at')->label('Last activity')->since(),
             TextColumn::make('support_note')->label('Internal note')->limit(50),
-        ])->recordUrl(fn ($r) => UserResource::getUrl('view', ['record' => $r]))->recordActions([
-            Action::make('resolve')->visible(fn () => ! auth()->user()->isViewer())->action(function ($record) {
+        ])->recordUrl(fn (User $record) => UserResource::getUrl('view', ['record' => $record]))->recordActions([
+            Action::make('resolve')->visible(fn () => ! auth()->user()->isViewer())->action(function (User $record) {
                 abort_if(auth()->user()->isViewer(), 403);
                 $record->update(['support_status' => 'closed']);
                 app(AuditLogger::class)->log('support.resolved', $record);

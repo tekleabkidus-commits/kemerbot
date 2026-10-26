@@ -49,6 +49,20 @@ it('renders every panel page for an owner', function (string $path) {
     '/admin/polls',
 ]);
 
+it('renders the inbox table when a conversation needs a reply', function () {
+    User::factory()->create([
+        'first_name' => 'Support Case',
+        'username' => 'supportcase',
+        'support_status' => 'open',
+    ]);
+
+    $this->actingAs($this->owner)
+        ->get('/admin/inbox')
+        ->assertOk()
+        ->assertSee('Support Case')
+        ->assertSee('@supportcase');
+});
+
 it('lets a viewer browse but hides admin-only pages', function () {
     $viewer = Admin::factory()->viewer()->create();
 
