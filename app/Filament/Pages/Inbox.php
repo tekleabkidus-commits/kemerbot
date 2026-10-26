@@ -1,42 +1,107 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Filament\Pages;
 
-use App\Filament\Resources\Users\UserResource;
+use App\Filament\Concerns\ManagesConversation;
 use App\Models\User;
-use App\Services\AuditLogger;
-use Filament\Actions\Action;
 use Filament\Pages\Page;
-use Filament\Tables\Columns\TextColumn;
-use Filament\Tables\Concerns\InteractsWithTable;
-use Filament\Tables\Contracts\HasTable;
-use Filament\Tables\Table;
 
-class Inbox extends Page implements HasTable
+class Inbox extends Page
 {
-    use InteractsWithTable;
+    use ManagesConversation;
 
     protected static ?int $navigationSort = 2;
 
-    protected string $view = 'filament.pages.table-page';
+    protected string $view = 'filament.pages.inbox';
 
     protected static string|\UnitEnum|null $navigationGroup = 'Audience';
 
     protected static string|\BackedEnum|null $navigationIcon = 'heroicon-o-chat-bubble-left-right';
 
-    public function table(Table $table): Table
+    public ?int $selectedUserId = null;
+
+    public string $search = '';
+
+    public string $statusFilter = 'active';
+
+    public int $conversationLimit = 80;
+
+    public function mount(): void
     {
-        return $table->query(User::query()->where('support_status', '!=', 'closed'))->columns([
-            TextColumn::make('first_name')->label('Person')->searchable()->description(fn (User $record) => $record->username ? '@'.$record->username : 'Telegram member'),
-            TextColumn::make('support_status')->badge()->label('Conversation'),
-            TextColumn::make('last_active_at')->label('Last activity')->since(),
-            TextColumn::make('support_note')->label('Internal note')->limit(50),
-        ])->recordUrl(fn (User $record) => UserResource::getUrl('view', ['record' => $record]))->recordActions([
-            Action::make('resolve')->visible(fn () => ! auth()->user()->isViewer())->action(function (User $record) {
-                abort_if(auth()->user()->isViewer(), 403);
-                $record->update(['support_status' => 'closed']);
-                app(AuditLogger::class)->log('support.resolved', $record);
-            }),
-        ])->emptyStateHeading('You’re all caught up')->emptyStateDescription('Messages that need a personal reply will appear here.')->defaultSort('last_active_at', 'desc');
+        $this->selectedUserId = User::query()
+            ->whereIn('support_status', ['open', 'pending'])
+            ->orderByDesc('last_active_at')
+            ->value('id');
+    }
+
+    public function selectConversation(int $userId): void
+    {
+        // Validate the id against the permitted audience before retaining it.
+        $user = User::query()->findOrFail($userId);
+        abort_unless(auth()->user()?->can('view', $user), 403);
+
+        $this->selectedUserId = $user->id;
+        $this->messageLimit = 60;
+        $this->reset('reply');
+    }
+
+    public function backToList(): void
+    {
+        $this->selectedUserId = null;
+    }
+
+    public function showMoreConversations(): void
+    {
+        $this->conversationLimit = min(500, $this->conversationLimit + 80);
+    }
+
+    protected function conversationUser(): ?User
+    {
+        return $this->selectedUserId === null
+            ? null
+            : User::query()->find($this->selectedUserId);
+    }
+
+    protected function getViewData(): array
+    {
+        $query = User::query()
+            ->with(['telegramMessages' => fn ($query) => $query
+                ->orderByDesc('sent_at')
+                ->orderByDesc('id')
+                ->limit(1)]);
+
+        if ($this->statusFilter === 'active') {
+            $query->whereIn('support_status', ['open', 'pending']);
+        } elseif ($this->statusFilter === 'closed') {
+            $query->where('support_status', 'closed');
+        }
+
+        $search = trim($this->search);
+
+        if ($search !== '') {
+            $query->where(function ($query) use ($search) {
+                $query->where('first_name', 'ilike', '%'.$search.'%')
+                    ->orWhere('username', 'ilike', '%'.$search.'%');
+
+                if (ctype_digit($search)) {
+                    $query->orWhere('tg_chat_id', $search);
+                }
+            });
+        }
+
+        $people = $query->orderByDesc('last_active_at')
+            ->orderByDesc('id')
+            ->limit($this->conversationLimit)
+            ->get();
+
+        $user = $this->conversationUser();
+
+        return [
+            'people' => $people,
+            'selectedUser' => $user,
+            'messages' => $this->conversationMessages($user),
+        ];
     }
 }

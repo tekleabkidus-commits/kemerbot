@@ -2,8 +2,10 @@
 
 namespace App\Filament\Resources\Users\Pages;
 
+use App\Filament\Concerns\ManagesConversation;
 use App\Filament\Resources\Users\UserResource;
 use App\Models\Admin;
+use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\DirectMessages;
 use Filament\Actions\Action;
@@ -16,6 +18,26 @@ use Filament\Resources\Pages\ViewRecord;
 
 class ViewUser extends ViewRecord
 {
+    use ManagesConversation;
+
+    protected string $view = 'filament.resources.users.pages.view-user-chat';
+
+    protected function conversationUser(): ?User
+    {
+        return $this->record;
+    }
+
+    protected function getViewData(): array
+    {
+        $user = $this->record;
+
+        return [
+            'user' => $user,
+            'messages' => $this->conversationMessages($user),
+            'assignedAdmin' => $user->assigned_admin_id ? Admin::find($user->assigned_admin_id) : null,
+        ];
+    }
+
     protected static string $resource = UserResource::class;
 
     protected function getHeaderActions(): array
