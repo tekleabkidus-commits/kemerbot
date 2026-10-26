@@ -38,6 +38,7 @@ class Home extends Page
             'scheduled' => Broadcast::query()->where('status', 'scheduled')->orderBy('scheduled_at')->limit(4)->get(),
             'openInbox' => User::query()->where('support_status', 'open')->count(), 'activeJourneys' => Automation::query()->where('is_active', true)->count(),
             'joins' => app(DashboardMetrics::class)->dailyJoins(14), 'subscribers' => User::query()->where('marketing_subscribed', true)->where('blocked_bot', false)->count(),
-            'pendingUpdates' => DB::table('telegram_updates')->where('status', '!=', 'processed')->count()];
+            'pendingUpdates' => DB::table('telegram_updates')->where('status', '!=', 'processed')->count(),
+            'conversations' => User::query()->whereIn('support_status', ['open', 'pending'])->orderByDesc('last_active_at')->limit(5)->get()];
     }
 }
