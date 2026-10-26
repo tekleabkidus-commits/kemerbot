@@ -162,3 +162,16 @@ body.fi-body{font-family:Inter,"Instrument Sans",ui-sans-serif,system-ui,-apple-
 @media(max-width:760px){.ks-grid{gap:12px}.ks-span-3,.ks-span-4,.ks-span-5,.ks-span-6,.ks-span-7,.ks-span-8{grid-column:span 12}.ks-stats-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ks-stat{padding:15px;min-height:110px}.ks-stat-head{font-size:11px}.ks-stat-number{font-size:26px}.ks-page-head{align-items:flex-start}.ks-page-actions{width:100%}.ks-page-actions .ks-action{flex:1}.fi-main{padding-inline:12px!important}.fi-ta-pagination{padding:12px!important}.fi-fo-field-wrp{min-width:0}.ks-panel-pad{padding:15px}.ks-panel-header{gap:7px}.ks-calendar-nav button{padding:8px 10px}.ks-form-actions{position:sticky;bottom:8px;z-index:10;box-shadow:0 4px 25px #13392418;flex-wrap:wrap}.ks-form-actions p{flex:1 1 100%}.ks-form-actions .fi-btn{width:100%;justify-content:center}.fi-header{align-items:flex-start}.fi-header-heading{font-size:22px!important}}
 @media(max-width:480px){.ks-chart-bars{gap:4px}.ks-chart-bar small{font-size:8px}.ks-stat-icon{width:29px;height:29px;font-size:14px}.ks-stat{padding:12px}.ks-stat-number{font-size:25px}.ks-stat-detail{font-size:10px}.ks-table{min-width:550px}}
 @media(prefers-reduced-motion:reduce){.ks-action,.fi-btn,.fi-ta-row,.fi-input-wrp{transition:none!important}}
+
+/* Touch-first, genuinely functional mobile workspace navigation. */
+.ks-mobile-nav{display:none}
+@media(max-width:767px){
+  .ks-mobile-nav{position:fixed;display:flex;align-items:stretch;justify-content:space-around;gap:2px;z-index:48;bottom:0;left:0;right:0;background:rgba(255,255,255,.97);backdrop-filter:blur(20px);border-top:1px solid var(--ks-border);box-shadow:0 -4px 22px #16472c0d;padding:7px 7px calc(7px + env(safe-area-inset-bottom))}
+  .ks-mobile-nav>a{display:flex;flex:1;min-width:0;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:49px;color:#85958a;text-decoration:none;font-size:9px;font-weight:660;border-radius:11px}
+  .ks-mobile-nav>a svg{display:block;width:20px;height:20px}
+  .ks-mobile-nav>a.is-current{background:#e7f6eb;color:#176b4c}
+  .ks-mobile-nav>a:hover{background:#f1f8f2;color:#176b4c}
+  .fi-main{padding-bottom:calc(95px + env(safe-area-inset-bottom))!important}
+  .kb-inbox-layout{height:calc(100dvh - 240px);min-height:330px}
+  .kb-profile-chat{height:calc(100dvh - 245px);min-height:370px}
+}
