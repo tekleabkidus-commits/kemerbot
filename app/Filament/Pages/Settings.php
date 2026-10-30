@@ -11,7 +11,6 @@ use App\Services\MediaFileService;
 use App\Services\SettingsService;
 use BackedEnum;
 use Filament\Forms\Components\FileUpload;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
@@ -56,12 +55,10 @@ class Settings extends Page
             'daily_limit' => $settings->get('messaging.daily_limit', 3), 'quiet_start' => $settings->get('messaging.quiet_start'), 'quiet_end' => $settings->get('messaging.quiet_end'), 'approval_threshold' => $settings->get('campaigns.approval_threshold', 1000),
             'channel_id' => $settings->get('channel.id'),
             'channel_url' => $settings->get('channel.url'),
-            'default_language' => $settings->get('bot.default_language', 'en'),
             'send_rate' => $settings->get('telegram.send_rate', (int) config('telegram.send_rate')),
             'test_recipients' => array_map('strval', (array) $settings->get('broadcast.test_recipient_chat_ids', [])),
             'webapp_url' => $settings->get('webapp.url'),
             'welcome_en' => $welcome['en'] ?? null,
-            'welcome_am' => $welcome['am'] ?? null,
             'welcome_media_upload' => $mediaPath,
             'feature_referrals' => (bool) ($features['referrals'] ?? true),
             'feature_polls' => (bool) ($features['polls'] ?? true),
@@ -84,16 +81,10 @@ class Settings extends Page
                     ->description('The reply every user gets on /start. Personalization: {first_name}.')
                     ->schema([
                         Textarea::make('welcome_en')
-                            ->label('Welcome (EN)')
+                            ->label('Welcome message (English)')
                             ->rows(4)
                             ->required()
                             ->maxLength(4000)
-                            ->disabled($isViewer),
-                        Textarea::make('welcome_am')
-                            ->label('Welcome (AM)')
-                            ->rows(4)
-                            ->maxLength(4000)
-                            ->helperText('Optional — Amharic users fall back to English if empty.')
                             ->disabled($isViewer),
                         FileUpload::make('welcome_media_upload')
                             ->label('Welcome media (optional)')
@@ -101,12 +92,6 @@ class Settings extends Page
                             ->directory('media')
                             ->acceptedFileTypes(MediaFileService::acceptedMimeTypes())
                             ->maxSize(50 * 1024)
-                            ->disabled($isViewer),
-                        Select::make('default_language')
-                            ->label('Default bot language')
-                            ->options(['en' => 'English', 'am' => 'Amharic'])
-                            ->required()
-                            ->native(false)
                             ->disabled($isViewer),
                     ]),
                 Section::make('Respectful messaging')->description('Promotions from campaigns and journeys share these limits.')->collapsible()->schema([
@@ -182,7 +167,7 @@ class Settings extends Page
                 ? (filled($state['channel_id']) ? $state['channel_id'] : null)
                 : $settings->get('channel.id'),
             'channel.url' => $state['channel_url'] ?? $settings->get('channel.url'),
-            'bot.default_language' => $state['default_language'] ?? $settings->get('bot.default_language', 'en'),
+            'bot.default_language' => 'en',
             'telegram.send_rate' => (int) ($state['send_rate'] ?? $settings->get('telegram.send_rate', (int) config('telegram.send_rate'))),
             'broadcast.test_recipient_chat_ids' => array_key_exists('test_recipients', $state)
                 ? array_values(array_filter(array_map('intval', (array) $state['test_recipients'])))
@@ -190,7 +175,6 @@ class Settings extends Page
             'webapp.url' => $state['webapp_url'] ?? $settings->get('webapp.url'),
             'welcome.message' => [
                 'en' => $state['welcome_en'] ?? ((array) $settings->get('welcome.message', []))['en'] ?? null,
-                'am' => $state['welcome_am'] ?? ((array) $settings->get('welcome.message', []))['am'] ?? null,
             ],
             'welcome.media_file_id' => $mediaId,
             'features' => [

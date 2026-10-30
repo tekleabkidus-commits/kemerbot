@@ -20,15 +20,15 @@ final class KeywordMatcher
     {
         $normalized = $this->normalize($input);
 
-        if ($normalized === '') {
-            return null;
-        }
-
         $rules = Cache::remember('bot:keyword-rules', 60, fn () => KeywordReply::query()
             ->where('is_active', true)
             ->orderBy('position')
             ->orderBy('id')
             ->with(['translations', 'mediaFile'])->get());
+
+        if ($normalized === '') {
+            return $rules->first(fn (KeywordReply $rule) => $rule->match_type === KeywordMatchType::Any);
+        }
 
         foreach ($rules as $rule) {
             if ($rule->match_type === KeywordMatchType::Exact) {
@@ -65,7 +65,8 @@ final class KeywordMatcher
             }
         }
 
-        return $best;
+        // Exact and contains rules always outrank the global catch-all rule.
+        return $best ?? $rules->first(fn (KeywordReply $rule) => $rule->match_type === KeywordMatchType::Any);
     }
 
     public function normalize(string $text): string

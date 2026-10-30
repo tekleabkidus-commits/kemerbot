@@ -51,7 +51,7 @@ it('splits settings keys between owner and marketer server-side', function () {
     expect($policy->updateKey($owner, 'channel.id'))->toBeTrue()
         ->and($policy->updateKey($owner, 'welcome.message'))->toBeTrue()
         ->and($policy->updateKey($marketer, 'welcome.message'))->toBeTrue()
-        ->and($policy->updateKey($marketer, 'bot.default_language'))->toBeTrue()
+        ->and($policy->updateKey($marketer, 'bot.default_language'))->toBeFalse()
         ->and($policy->updateKey($marketer, 'channel.id'))->toBeFalse()
         ->and($policy->updateKey($marketer, 'telegram.send_rate'))->toBeFalse()
         ->and($policy->updateKey($marketer, 'broadcast.test_recipient_chat_ids'))->toBeFalse()

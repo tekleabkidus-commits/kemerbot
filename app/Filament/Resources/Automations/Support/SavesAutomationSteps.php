@@ -30,7 +30,7 @@ trait SavesAutomationSteps
                 ],
             );
 
-            foreach (BotLanguage::cases() as $lang) {
+            foreach ([BotLanguage::En] as $lang) {
                 $text = $row['text_'.$lang->value] ?? null;
 
                 if (filled($text)) {
@@ -49,7 +49,6 @@ trait SavesAutomationSteps
         return $automation->steps->map(fn ($step) => [
             'delay_hours' => $step->delay_hours,
             'text_en' => $step->translations->firstWhere('lang', BotLanguage::En)?->text,
-            'text_am' => $step->translations->firstWhere('lang', BotLanguage::Am)?->text,
             'buttons' => $step->buttons ?? [],
         ])->all();
     }

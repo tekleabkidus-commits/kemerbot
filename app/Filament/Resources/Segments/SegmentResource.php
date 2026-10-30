@@ -8,7 +8,6 @@ use App\Models\AudienceSegment;
 use App\Services\Broadcasts\AudienceQuery;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
@@ -51,10 +50,6 @@ class SegmentResource extends Resource
                 ->description('Only people meeting the criteria are included. Blocked or unsubscribed people are still excluded by the sending policy.')
                 ->columns(2)
                 ->schema([
-                    Select::make('filter.language')
-                        ->label('Language')
-                        ->placeholder('All languages')
-                        ->options(['en' => 'English', 'am' => 'Amharic']),
                     TextInput::make('filter.active_last_days')
                         ->label('Active within the last N days')
                         ->numeric()

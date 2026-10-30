@@ -27,8 +27,6 @@ use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Wizard\Step;
@@ -99,15 +97,10 @@ class BroadcastWizard
                         ->label('Question (EN)')
                         ->maxLength(300)
                         ->required(fn (Get $get): bool => $get('type') === 'poll'),
-                    TextInput::make('poll_question_am')
-                        ->label('Question (AM)')
-                        ->maxLength(300)
-                        ->helperText('Optional — falls back to English.'),
                     Repeater::make('poll_options')
                         ->label('Options (2–10)')
                         ->schema([
                             TextInput::make('en')->label('Option (EN)')->required()->maxLength(100),
-                            TextInput::make('am')->label('Option (AM)')->maxLength(100),
                         ])
                         ->columns(2)
                         ->minItems(2)
@@ -120,41 +113,22 @@ class BroadcastWizard
                         ->default(true)
                         ->helperText('Results aggregate on the dashboard either way.'),
                 ]),
-            Tabs::make('Message')
+            Section::make('Message (English)')
                 ->visible(fn (Get $get): bool => $get('type') !== 'poll')
-                ->tabs([
-                    Tab::make('English')
-                        ->schema([
-                            Textarea::make('text_en')
-                                ->label('Message (EN)')
-                                ->rows(6)
-                                ->live(onBlur: true)
-                                ->maxLength(4096)
-                                ->required(fn (Get $get): bool => $get('type') !== 'poll')
-                                ->helperText('Personalization: {first_name}. Telegram limit: 4096 characters — 1024 when media is attached.'),
-                            FileUpload::make('media_en_upload')
-                                ->label('Media (EN)')
-                                ->disk(config('filesystems.default'))
-                                ->directory('media')
-                                ->acceptedFileTypes(MediaFileService::acceptedMimeTypes())
-                                ->maxSize(50 * 1024),
-                        ]),
-                    Tab::make('Amharic')
-                        ->schema([
-                            Textarea::make('text_am')
-                                ->label('Message (AM)')
-                                ->rows(6)
-                                ->live(onBlur: true)
-                                ->maxLength(4096)
-                                ->helperText('Optional — Amharic users fall back to the English message if empty.'),
-                            FileUpload::make('media_am_upload')
-                                ->label('Media (AM)')
-                                ->disk(config('filesystems.default'))
-                                ->directory('media')
-                                ->acceptedFileTypes(MediaFileService::acceptedMimeTypes())
-                                ->maxSize(50 * 1024)
-                                ->helperText('Optional — falls back to the English media if empty.'),
-                        ]),
+                ->schema([
+                    Textarea::make('text_en')
+                        ->label('Message')
+                        ->rows(6)
+                        ->live(onBlur: true)
+                        ->maxLength(4096)
+                        ->required(fn (Get $get): bool => $get('type') !== 'poll')
+                        ->helperText('Personalization: {first_name}. Telegram limit: 4096 characters — 1024 with media.'),
+                    FileUpload::make('media_en_upload')
+                        ->label('Media')
+                        ->disk(config('filesystems.default'))
+                        ->directory('media')
+                        ->acceptedFileTypes(MediaFileService::acceptedMimeTypes())
+                        ->maxSize(50 * 1024),
                 ]),
             Section::make('Preview')
                 ->description('How the English rendering will look, personalized with a sample name.')
@@ -171,7 +145,6 @@ class BroadcastWizard
                             'tf_odds_away' => $get('tf_odds_away'),
                             'tf_cta' => $get('tf_cta'),
                             'text_en' => $get('text_en'),
-                            'text_am' => $get('text_am'),
                             'buttons_data' => [],
                         ]);
 
@@ -208,7 +181,6 @@ class BroadcastWizard
                         ->visible(fn (Get $get): bool => $get('kind') === 'url')
                         ->required(fn (Get $get): bool => $get('kind') === 'url'),
                     TextInput::make('label.en')->label('Label (EN)')->required()->maxLength(64),
-                    TextInput::make('label.am')->label('Label (AM)')->maxLength(64),
                     TextInput::make('row')
                         ->numeric()
                         ->default(0)
@@ -249,9 +221,6 @@ class BroadcastWizard
                     DatePicker::make('aud_joined_before')->label('Joined before')->live(),
                     TextInput::make('aud_active_last_days')->label('Active in last N days')->numeric()->minValue(1)->live(onBlur: true),
                     TextInput::make('aud_inactive_days')->label('Inactive for N+ days')->numeric()->minValue(1)->live(onBlur: true),
-                    Select::make('aud_language')->label('Language')
-                        ->options(['en' => 'English', 'am' => 'Amharic'])
-                        ->live()->native(false),
                     Select::make('aud_source')->label('Source')
                         ->options(fn (): array => User::query()->whereNotNull('source')->distinct()->pluck('source', 'source')->all())
                         ->live()->native(false),
@@ -283,7 +252,6 @@ class BroadcastWizard
                 Select::make('topic')->options(['general' => 'General', 'matches' => 'Matches', 'offers' => 'Offers', 'news' => 'News'])->default('general'),
                 DateTimePicker::make('expires_at')->label('Stop sending after')->timezone(config('app.display_timezone'))->seconds(false),
                 Textarea::make('experiment.text_b.en')->label('Alternative message (English)')->helperText('Optional. Half of the audience receives this version.')->maxLength(4000),
-                Textarea::make('experiment.text_b.am')->label('Alternative message (Amharic)')->maxLength(4000),
                 TextInput::make('experiment.holdout_percent')->label('Holdout group (%)')->numeric()->minValue(0)->maxValue(50)->default(0)->helperText('A comparison group that receives no message.'),
             ]),
             Radio::make('timing_mode')

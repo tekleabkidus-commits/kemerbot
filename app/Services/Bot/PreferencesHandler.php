@@ -18,9 +18,9 @@ final class PreferencesHandler
         } elseif ($command === '/subscribe') {
             $user->update(['marketing_subscribed' => true]);
             $message = $locale->uiText('subscribed', $lang);
-        } elseif (preg_match('/^\/language (en|am)$/', $command, $m)) {
-            $user->update(['preferred_language' => $m[1]]);
-            $message = $locale->uiText('preferences_saved', $locale->resolve($user));
+        } elseif (str_starts_with($command, '/language')) {
+            $user->update(['preferred_language' => 'en']);
+            $message = 'This bot uses English only.';
         } elseif (preg_match('/^\/topics (general|matches|offers|news)(,(general|matches|offers|news))*$/', $command)) {
             $user->update(['topics' => array_values(array_unique(explode(',', substr($command, 8))))]);
             $message = $locale->uiText('preferences_saved', $lang);

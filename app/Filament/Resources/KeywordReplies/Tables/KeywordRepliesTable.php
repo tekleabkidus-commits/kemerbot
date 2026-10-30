@@ -17,8 +17,11 @@ class KeywordRepliesTable
         return $table
             ->columns([
                 TextColumn::make('keywords')
-                    ->badge()
-                    ->separator(','),
+                    ->label('Keywords')
+                    ->state(fn ($record): string => $record->match_type === KeywordMatchType::Any
+                        ? 'Any message'
+                        : implode(', ', $record->keywords ?? []))
+                    ->badge(),
                 TextColumn::make('match_type')
                     ->badge()
                     ->color(fn (KeywordMatchType $state): string => $state === KeywordMatchType::Exact ? 'success' : 'info'),
@@ -37,7 +40,7 @@ class KeywordRepliesTable
             ])
             ->defaultSort('position')
             ->emptyStateHeading('No auto replies yet')
-            ->emptyStateDescription('Create keyword rules so the bot answers common questions automatically.')
+            ->emptyStateDescription('Add Exact, Contains, or Any message rules for automatic English replies.')
             ->recordActions([
                 EditAction::make(),
                 DeleteAction::make(),

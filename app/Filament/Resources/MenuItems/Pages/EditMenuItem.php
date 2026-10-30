@@ -27,12 +27,9 @@ class EditMenuItem extends EditRecord
     {
         $translations = $this->record->translations;
         $en = $translations->firstWhere('lang', BotLanguage::En);
-        $am = $translations->firstWhere('lang', BotLanguage::Am);
 
         $data['label_en'] = $en?->label;
         $data['reply_text_en'] = $en?->reply_text;
-        $data['label_am'] = $am?->label;
-        $data['reply_text_am'] = $am?->reply_text;
         $data['media_upload'] = $this->record->mediaFile?->path;
 
         return $data;
@@ -42,7 +39,6 @@ class EditMenuItem extends EditRecord
     {
         $this->translationData = [
             'en' => ['label' => $data['label_en'] ?? null, 'reply_text' => $data['reply_text_en'] ?? null],
-            'am' => ['label' => $data['label_am'] ?? null, 'reply_text' => $data['reply_text_am'] ?? null],
         ];
 
         $data['media_file_id'] = FormMedia::resolveMediaFileId(

@@ -24,11 +24,10 @@ it('creates and immediately sends a broadcast through the wizard', function () {
         ->fillForm([
             'type' => 'standard',
             'text_en' => 'Big weekend odds, {first_name}!',
-            'text_am' => 'ታላቅ የሳምንቱ መጨረሻ ዕድሎች {first_name}!',
             'buttons_data' => [[
                 'kind' => 'url',
                 'url' => 'https://kemerbet.co',
-                'label' => ['en' => 'Bet now', 'am' => 'አሁን ይወራረዱ'],
+                'label' => ['en' => 'Bet now'],
                 'row' => 0,
             ]],
             'timing_mode' => 'now',
@@ -43,16 +42,16 @@ it('creates and immediately sends a broadcast through the wizard', function () {
         ->and($broadcast->status)->toBe(BroadcastStatus::Completed)
         ->and($broadcast->queued)->toBe(5)
         ->and($broadcast->sent)->toBe(5)
-        ->and($broadcast->translations()->count())->toBe(2)
+        ->and($broadcast->translations()->count())->toBe(1)
         ->and($broadcast->buttons()->count())->toBe(1)
-        ->and($broadcast->buttons()->first()->translations()->count())->toBe(2);
+        ->and($broadcast->buttons()->first()->translations()->count())->toBe(1);
 
-    // Amharic users got the Amharic rendering.
-    $amText = collect(fakeTelegram()->callsTo('sendMessage'))
+    // All recipients, regardless of their Telegram language, receive English.
+    $englishText = collect(fakeTelegram()->callsTo('sendMessage'))
         ->pluck('params.text')
-        ->filter(fn (string $t) => str_contains($t, 'ታላቅ'));
+        ->filter(fn (string $t) => str_contains($t, 'Big weekend odds'));
 
-    expect($amText)->toHaveCount(2);
+    expect($englishText)->toHaveCount(5);
 });
 
 it('creates a scheduled broadcast without sending', function () {

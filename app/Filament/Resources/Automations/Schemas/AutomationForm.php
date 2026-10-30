@@ -73,18 +73,12 @@ class AutomationForm
                             ->rows(3)
                             ->required()
                             ->maxLength(4000),
-                        Textarea::make('text_am')
-                            ->label('Message (AM)')
-                            ->rows(3)
-                            ->maxLength(4000)
-                            ->helperText('Optional — falls back to English.'),
                         Repeater::make('buttons')
                             ->label('URL buttons')
                             ->schema([
                                 Hidden::make('kind')->default('url'),
                                 TextInput::make('url')->url()->required(),
                                 TextInput::make('label.en')->label('Label (EN)')->required()->maxLength(64),
-                                TextInput::make('label.am')->label('Label (AM)')->maxLength(64),
                             ])
                             ->columns(3)
                             ->defaultItems(0),

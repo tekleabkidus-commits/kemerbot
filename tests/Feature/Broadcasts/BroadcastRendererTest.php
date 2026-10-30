@@ -13,7 +13,7 @@ use App\Services\Broadcasts\InvalidBroadcastTransition;
 
 $render = fn (Broadcast $broadcast, User $user) => app(BroadcastRenderer::class)->render($broadcast->load('translations', 'buttons.translations'), $user);
 
-it('renders the user language with english fallback', function () use ($render) {
+it('always renders English regardless of the user language', function () use ($render) {
     $broadcast = Broadcast::factory()->create();
     BroadcastTranslation::factory()->for($broadcast)->create(['text' => 'English text']);
     BroadcastTranslation::factory()->for($broadcast)->amharic()->create(['text' => 'የአማርኛ ጽሑፍ']);
@@ -21,7 +21,7 @@ it('renders the user language with english fallback', function () use ($render) 
     $amUser = User::factory()->amharic()->create();
     $enUser = User::factory()->create();
 
-    expect($render($broadcast, $amUser)->text)->toBe('የአማርኛ ጽሑፍ')
+    expect($render($broadcast, $amUser)->text)->toBe('English text')
         ->and($render($broadcast, $enUser)->text)->toBe('English text');
 });
 
@@ -34,7 +34,7 @@ it('falls back to english when the amharic translation is missing', function () 
     expect($render($broadcast, $amUser)->text)->toBe('Only English');
 });
 
-it('keeps Amharic text while falling back to the English image', function () use ($render) {
+it('keeps English text and media even when Amharic media exists', function () use ($render) {
     $broadcast = Broadcast::factory()->create();
     $photo = MediaFile::factory()->create();
 
@@ -49,11 +49,11 @@ it('keeps Amharic text while falling back to the English image', function () use
 
     $message = $render($broadcast, User::factory()->amharic()->create());
 
-    expect($message->text)->toBe('የአማርኛ መልእክት')
+    expect($message->text)->toBe('English caption')
         ->and($message->media?->id)->toBe($photo->id);
 });
 
-it('prefers a language-specific image when both translations have media', function () use ($render) {
+it('always chooses English media when both translations have media', function () use ($render) {
     $broadcast = Broadcast::factory()->create();
     $englishPhoto = MediaFile::factory()->create();
     $amharicPhoto = MediaFile::factory()->create();
@@ -70,7 +70,7 @@ it('prefers a language-specific image when both translations have media', functi
     $amMessage = $render($broadcast, User::factory()->amharic()->create());
     $enMessage = $render($broadcast, User::factory()->create());
 
-    expect($amMessage->media?->id)->toBe($amharicPhoto->id)
+    expect($amMessage->media?->id)->toBe($englishPhoto->id)
         ->and($enMessage->media?->id)->toBe($englishPhoto->id);
 });
 
@@ -128,7 +128,7 @@ it('builds the inline keyboard with rows, url and tracked callback buttons', fun
         ]);
 });
 
-it('renders button labels in the user language', function () use ($render) {
+it('always renders button labels in English', function () use ($render) {
     $broadcast = Broadcast::factory()->create();
     BroadcastTranslation::factory()->for($broadcast)->create();
     $button = BroadcastButton::factory()->for($broadcast)->create();
@@ -137,7 +137,7 @@ it('renders button labels in the user language', function () use ($render) {
 
     $keyboard = $render($broadcast, User::factory()->amharic()->create())->replyMarkup['inline_keyboard'];
 
-    expect($keyboard[0][0]['text'])->toBe('አሁን ይወራረዱ');
+    expect($keyboard[0][0]['text'])->toBe('Bet now');
 });
 
 it('formats the match promo caption with kickoff in Addis time', function () {

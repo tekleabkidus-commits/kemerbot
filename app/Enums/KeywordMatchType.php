@@ -8,4 +8,5 @@ enum KeywordMatchType: string
 {
     case Exact = 'exact';
     case Contains = 'contains';
+    case Any = 'any';
 }

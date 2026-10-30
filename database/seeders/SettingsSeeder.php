@@ -24,7 +24,6 @@ class SettingsSeeder extends Seeder
             'webapp.url' => 'https://kemerbet.co/en/sport',
             'welcome.message' => [
                 'en' => "Welcome to KemerBet, {first_name}! ⚽\nUse the menu below to explore matches, promos and more.",
-                'am' => "እንኳን ወደ KemerBet በደህና መጡ {first_name}! ⚽\nግጥሚያዎችን፣ ማስተዋወቂያዎችን እና ሌሎችንም ለማየት ከታች ያለውን ምናሌ ይጠቀሙ።",
             ],
             'welcome.media_file_id' => null,
             'features' => [

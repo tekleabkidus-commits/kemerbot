@@ -62,14 +62,14 @@ it('audits settings changes with old and new values', function () {
 
     Livewire::actingAs($owner)
         ->test(Settings::class)
-        ->fillForm(['default_language' => 'am'])
+        ->fillForm(['welcome_en' => 'Updated welcome text'])
         ->call('save');
 
     $entry = AuditLog::query()->where('action', 'settings.updated')->first();
 
     expect($entry)->not->toBeNull()
-        ->and($entry->meta['changed']['bot.default_language'])
-        ->toEqual(['from' => 'en', 'to' => 'am']);
+        ->and($entry->meta['changed']['welcome.message']['to'])
+        ->toEqual(['en' => 'Updated welcome text']);
 });
 
 it('ignores infrastructure keys when a marketer submits them', function () {

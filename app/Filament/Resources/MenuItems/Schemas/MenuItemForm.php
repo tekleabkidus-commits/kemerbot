@@ -13,8 +13,6 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
@@ -80,33 +78,18 @@ class MenuItemForm
                                 }
                             }),
                     ]),
-                Tabs::make('Labels & reply')
-                    ->tabs([
-                        Tab::make('English')
-                            ->schema([
-                                TextInput::make('label_en')
-                                    ->label('Button label (EN)')
-                                    ->required()
-                                    ->maxLength(64),
-                                Textarea::make('reply_text_en')
-                                    ->label('Reply text (EN)')
-                                    ->rows(4)
-                                    ->maxLength(4000)
-                                    ->visible(fn (Get $get): bool => $get('action_type') === MenuActionType::Reply->value)
-                                    ->required(fn (Get $get): bool => $get('action_type') === MenuActionType::Reply->value),
-                            ]),
-                        Tab::make('Amharic')
-                            ->schema([
-                                TextInput::make('label_am')
-                                    ->label('Button label (AM)')
-                                    ->maxLength(64)
-                                    ->helperText('Optional — Amharic users fall back to English if empty.'),
-                                Textarea::make('reply_text_am')
-                                    ->label('Reply text (AM)')
-                                    ->rows(4)
-                                    ->maxLength(4000)
-                                    ->visible(fn (Get $get): bool => $get('action_type') === MenuActionType::Reply->value),
-                            ]),
+                Section::make('Labels & reply (English)')
+                    ->schema([
+                        TextInput::make('label_en')
+                            ->label('Button label')
+                            ->required()
+                            ->maxLength(64),
+                        Textarea::make('reply_text_en')
+                            ->label('Reply text')
+                            ->rows(4)
+                            ->maxLength(4000)
+                            ->visible(fn (Get $get): bool => $get('action_type') === MenuActionType::Reply->value)
+                            ->required(fn (Get $get): bool => $get('action_type') === MenuActionType::Reply->value),
                     ]),
                 Section::make('Media')
                     ->collapsed()

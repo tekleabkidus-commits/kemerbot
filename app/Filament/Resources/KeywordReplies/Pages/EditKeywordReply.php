@@ -27,7 +27,6 @@ class EditKeywordReply extends EditRecord
         $translations = $this->record->translations;
 
         $data['reply_text_en'] = $translations->firstWhere('lang', BotLanguage::En)?->reply_text;
-        $data['reply_text_am'] = $translations->firstWhere('lang', BotLanguage::Am)?->reply_text;
         $data['media_upload'] = $this->record->mediaFile?->path;
 
         return $data;
@@ -37,8 +36,11 @@ class EditKeywordReply extends EditRecord
     {
         $this->translationTexts = [
             'en' => $data['reply_text_en'] ?? null,
-            'am' => $data['reply_text_am'] ?? null,
         ];
+
+        if (($data['match_type'] ?? null) === 'any') {
+            $data['keywords'] = [];
+        }
 
         $data['media_file_id'] = FormMedia::resolveMediaFileId(
             $data['media_upload'] ?? null,

@@ -48,7 +48,7 @@ class CreateBroadcast extends CreateRecord
         $state = $this->wizardState;
         $broadcast = $this->record;
 
-        foreach (BotLanguage::cases() as $lang) {
+        foreach ([BotLanguage::En] as $lang) {
             $text = $state['text_'.$lang->value] ?? null;
             $mediaPath = $state['media_'.$lang->value.'_upload'] ?? null;
 
@@ -67,11 +67,9 @@ class CreateBroadcast extends CreateRecord
             $broadcast->poll()->create([
                 'question' => array_filter([
                     'en' => $state['poll_question_en'] ?? null,
-                    'am' => $state['poll_question_am'] ?? null,
                 ], fn ($v) => filled($v)),
                 'options' => [
                     'en' => array_values(array_filter(array_column($state['poll_options'] ?? [], 'en'), 'filled')),
-                    'am' => array_values(array_filter(array_column($state['poll_options'] ?? [], 'am'), 'filled')),
                 ],
                 'is_anonymous' => (bool) ($state['poll_is_anonymous'] ?? true),
             ]);
@@ -89,7 +87,7 @@ class CreateBroadcast extends CreateRecord
                 'url' => ($row['kind'] ?? 'url') === 'url' ? ($row['url'] ?? null) : null,
             ]);
 
-            foreach (['en', 'am'] as $lang) {
+            foreach (['en'] as $lang) {
                 if (filled($row['label'][$lang] ?? null)) {
                     $button->translations()->create(['lang' => $lang, 'label' => $row['label'][$lang]]);
                 }

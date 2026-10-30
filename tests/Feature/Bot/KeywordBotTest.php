@@ -64,22 +64,22 @@ it('breaks ties by lowest position', function () {
     expect(fakeTelegram()->lastSentTo(7001)['params']['text'])->toBe('first');
 });
 
-it('matches amharic keywords with unicode normalization', function () {
-    keywordRule(['ቦነስ'], 'exact', 'የቦነስ መረጃ እነሆ!');
+it('matches non-Latin keywords while using the English reply', function () {
+    keywordRule(['ቦነስ'], 'exact', 'Here is your bonus information.');
 
     postWebhook(telegramMessageUpdate(7001, 'ቦነስ', ['language_code' => 'am']));
 
-    expect(fakeTelegram()->lastSentTo(7001)['params']['text'])->toBe('የቦነስ መረጃ እነሆ!');
+    expect(fakeTelegram()->lastSentTo(7001)['params']['text'])->toBe('Here is your bonus information.');
 });
 
-it('replies in the user language with english fallback', function () {
+it('always uses English even when an Amharic reply exists', function () {
     $rule = keywordRule(['help'], 'exact', 'How can we help?');
     KeywordReplyTranslation::factory()->for($rule)->amharic()->create(['reply_text' => 'እንዴት እንርዳዎት?']);
 
     postWebhook(telegramMessageUpdate(7001, 'help', ['language_code' => 'am']));
     postWebhook(telegramMessageUpdate(7002, 'help', ['language_code' => 'en']));
 
-    expect(fakeTelegram()->lastSentTo(7001)['params']['text'])->toBe('እንዴት እንርዳዎት?')
+    expect(fakeTelegram()->lastSentTo(7001)['params']['text'])->toBe('How can we help?')
         ->and(fakeTelegram()->lastSentTo(7002)['params']['text'])->toBe('How can we help?');
 });
 

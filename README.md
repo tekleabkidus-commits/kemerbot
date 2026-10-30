@@ -74,3 +74,19 @@ Cron: `* * * * * php artisan schedule:run` — drives `broadcasts:process-due` a
 **Owner** — everything · **Marketer** — content, broadcasts, automations, audience,
 polls, tracking links (no admin management, no infrastructure settings) · **Viewer** —
 read-only. Enforced server-side with policies; every admin mutation is audited.
+
+## English-only bot and universal auto reply
+
+BetnaBot now sends all runtime content in English regardless of a Telegram user's
+language. The admin forms no longer ask for Amharic translations. Historical
+Amharic translations are not deleted during upgrade.
+
+To configure one reply for arbitrary inbound messages, open **Admin → Bot Content
+→ Auto Replies → Create**. Select **Any message**, enter your English reply,
+and enable the rule. The rule is the fallback after Exact and Contains keyword
+rules; `/start` remains the welcome flow and preference commands keep their
+own acknowledgements. The catch-all supports incoming text and media messages
+without requiring keywords. Disable the rule to silence unmatched messages.
+
+Existing deployments must run `php artisan migrate --force` before using the
+new Any message rule type. Restart queue workers after deploying new code.

@@ -11,10 +11,9 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Tabs;
-use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 
 class KeywordReplyForm
@@ -27,15 +26,18 @@ class KeywordReplyForm
                     ->columns(2)
                     ->schema([
                         TagsInput::make('keywords')
-                            ->required()
-                            ->helperText('Case-insensitive. Amharic keywords fully supported.'),
+                            ->required(fn (Get $get): bool => $get('match_type') !== KeywordMatchType::Any->value)
+                            ->visible(fn (Get $get): bool => $get('match_type') !== KeywordMatchType::Any->value)
+                            ->helperText('Case-insensitive. Leave this blank for the Any message rule.'),
                         Select::make('match_type')
                             ->options([
                                 KeywordMatchType::Exact->value => 'Exact — message equals the keyword',
                                 KeywordMatchType::Contains->value => 'Contains — keyword appears in the message',
+                                KeywordMatchType::Any->value => 'Any message — one automatic reply when no keyword matches',
                             ])
                             ->default(KeywordMatchType::Exact->value)
                             ->required()
+                            ->live()
                             ->native(false),
                         TextInput::make('position')
                             ->numeric()
@@ -45,24 +47,13 @@ class KeywordReplyForm
                             ->default(true)
                             ->inline(false),
                     ]),
-                Tabs::make('Reply')
-                    ->tabs([
-                        Tab::make('English')
-                            ->schema([
-                                Textarea::make('reply_text_en')
-                                    ->label('Reply text (EN)')
-                                    ->rows(4)
-                                    ->required()
-                                    ->maxLength(4000),
-                            ]),
-                        Tab::make('Amharic')
-                            ->schema([
-                                Textarea::make('reply_text_am')
-                                    ->label('Reply text (AM)')
-                                    ->rows(4)
-                                    ->maxLength(4000)
-                                    ->helperText('Optional — users on Amharic fall back to English if empty.'),
-                            ]),
+                Section::make('Reply (English)')
+                    ->schema([
+                        Textarea::make('reply_text_en')
+                            ->label('Automatic reply message')
+                            ->rows(4)
+                            ->required()
+                            ->maxLength(4000),
                     ]),
                 Section::make('Media & buttons')
                     ->collapsed()
@@ -80,7 +71,6 @@ class KeywordReplyForm
                                 Hidden::make('kind')->default('url'),
                                 TextInput::make('url')->url()->required(),
                                 TextInput::make('label.en')->label('Label (EN)')->required()->maxLength(64),
-                                TextInput::make('label.am')->label('Label (AM)')->maxLength(64),
                             ])
                             ->columns(3)
                             ->defaultItems(0)

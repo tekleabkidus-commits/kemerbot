@@ -18,7 +18,7 @@ use App\Services\Telegram\TelegramMembershipService;
 
 /**
  * Non-command inbound messages: capture, activity + blocked recovery, join
- * gate, then keyword auto-replies (spec §5.1). No match → deliberately silent.
+ * gate, then specific keyword rules, followed by an optional any-message rule.
  */
 final class IncomingMessageHandler
 {
@@ -54,13 +54,9 @@ final class IncomingMessageHandler
             return;
         }
 
-        $text = $message['text'] ?? null;
-
-        if (! is_string($text) || $text === '') {
-            return;
-        }
-
-        $rule = $this->keywords->match($text);
+        // Photo, video, and other messages without text can use the catch-all.
+        $text = $message['text'] ?? $message['caption'] ?? '';
+        $rule = $this->keywords->match(is_string($text) ? $text : '');
 
         if ($rule !== null) {
             $this->sendKeywordReply($user, $rule);

@@ -36,7 +36,7 @@ class EditBroadcast extends EditRecord
         $filter = $record->audience_filter ?? [];
         $recurrence = $record->recurrence ?? [];
 
-        foreach (BotLanguage::cases() as $lang) {
+        foreach ([BotLanguage::En] as $lang) {
             $translation = $record->translations->firstWhere('lang', $lang);
             $data['text_'.$lang->value] = $translation?->text;
             $data['media_'.$lang->value.'_upload'] = $translation?->mediaFile?->path;
@@ -48,7 +48,6 @@ class EditBroadcast extends EditRecord
             'row' => $button->row,
             'label' => [
                 'en' => $button->translations->firstWhere('lang', BotLanguage::En)?->label,
-                'am' => $button->translations->firstWhere('lang', BotLanguage::Am)?->label,
             ],
         ])->all();
 
@@ -105,7 +104,7 @@ class EditBroadcast extends EditRecord
         $state = $this->formState;
         $broadcast = $this->record;
 
-        foreach (BotLanguage::cases() as $lang) {
+        foreach ([BotLanguage::En] as $lang) {
             $text = $state['text_'.$lang->value] ?? null;
             $mediaPath = $state['media_'.$lang->value.'_upload'] ?? null;
             $existing = $broadcast->translations->firstWhere('lang', $lang);
@@ -140,7 +139,7 @@ class EditBroadcast extends EditRecord
                 'url' => ($row['kind'] ?? 'url') === 'url' ? ($row['url'] ?? null) : null,
             ]);
 
-            foreach (['en', 'am'] as $lang) {
+            foreach (['en'] as $lang) {
                 if (filled($row['label'][$lang] ?? null)) {
                     $button->translations()->create(['lang' => $lang, 'label' => $row['label'][$lang]]);
                 }

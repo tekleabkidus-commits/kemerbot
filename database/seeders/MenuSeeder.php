@@ -25,15 +25,9 @@ class MenuSeeder extends Seeder
             'label' => 'ℹ️ About KemerBet',
             'reply_text' => "KemerBet — Ethiopia's home of sport. ⚽\nOdds, promos and more at kemerbet.co",
         ]);
-        $about->translations()->create([
-            'lang' => 'am',
-            'label' => 'ℹ️ ስለ KemerBet',
-            'reply_text' => "KemerBet — የኢትዮጵያ የስፖርት ቤት። ⚽\nkemerbet.co ላይ ይጎብኙን",
-        ]);
 
         $games = MenuItem::query()->create(['action_type' => 'submenu', 'position' => 1]);
         $games->translations()->create(['lang' => 'en', 'label' => '🎮 Games']);
-        $games->translations()->create(['lang' => 'am', 'label' => '🎮 ጨዋታዎች']);
 
         $sportsbook = MenuItem::query()->create([
             'parent_id' => $games->id,
@@ -42,7 +36,6 @@ class MenuSeeder extends Seeder
             'position' => 0,
         ]);
         $sportsbook->translations()->create(['lang' => 'en', 'label' => '⚽ Sportsbook']);
-        $sportsbook->translations()->create(['lang' => 'am', 'label' => '⚽ ስፖርት']);
 
         $casino = MenuItem::query()->create([
             'parent_id' => $games->id,
@@ -51,7 +44,6 @@ class MenuSeeder extends Seeder
             'position' => 1,
         ]);
         $casino->translations()->create(['lang' => 'en', 'label' => '🎰 Casino']);
-        $casino->translations()->create(['lang' => 'am', 'label' => '🎰 ካሲኖ']);
 
         $site = MenuItem::query()->create([
             'action_type' => 'url',
@@ -59,10 +51,8 @@ class MenuSeeder extends Seeder
             'position' => 2,
         ]);
         $site->translations()->create(['lang' => 'en', 'label' => '🌍 Visit KemerBet']);
-        $site->translations()->create(['lang' => 'am', 'label' => '🌍 KemerBet ይጎብኙ']);
 
         $invite = MenuItem::query()->create(['action_type' => 'invite', 'position' => 3]);
         $invite->translations()->create(['lang' => 'en', 'label' => '🎉 Invite friends']);
-        $invite->translations()->create(['lang' => 'am', 'label' => '🎉 ጓደኞችን ይጋብዙ']);
     }
 }

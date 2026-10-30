@@ -92,7 +92,7 @@ class BroadcastFormState
 
         $translations = collect();
 
-        foreach (['en' => 'text_en', 'am' => 'text_am'] as $lang => $key) {
+        foreach (['en' => 'text_en'] as $lang => $key) {
             if (! filled($state[$key] ?? null)) {
                 continue;
             }
@@ -121,7 +121,7 @@ class BroadcastFormState
 
             $labels = collect();
 
-            foreach (['en', 'am'] as $lang) {
+            foreach (['en'] as $lang) {
                 if (filled($row['label'][$lang] ?? null)) {
                     $labels->push(new BroadcastButtonTranslation(['lang' => $lang, 'label' => $row['label'][$lang]]));
                 }

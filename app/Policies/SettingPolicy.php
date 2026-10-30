@@ -8,8 +8,7 @@ use App\Models\Admin;
 
 /**
  * Settings screen (spec §5.9): Owner sees and edits everything; Marketers may
- * open the page and edit CONTENT settings only (welcome message, default
- * language) — the per-key split is enforced server-side in the Settings page
+ * open the page and edit CONTENT settings only (welcome message) — the per-key split is enforced server-side in the Settings page
  * via `updateKey`. Infrastructure keys are Owner-only. Viewers read-only.
  */
 class SettingPolicy
@@ -18,7 +17,6 @@ class SettingPolicy
     public const MARKETER_EDITABLE_KEYS = [
         'welcome.message',
         'welcome.media_file_id',
-        'bot.default_language',
     ];
 
     public function viewAny(Admin $admin): bool

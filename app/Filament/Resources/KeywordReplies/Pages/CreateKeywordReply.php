@@ -17,8 +17,11 @@ class CreateKeywordReply extends CreateRecord
     {
         $this->translationTexts = [
             'en' => $data['reply_text_en'] ?? null,
-            'am' => $data['reply_text_am'] ?? null,
         ];
+
+        if (($data['match_type'] ?? null) === 'any') {
+            $data['keywords'] = [];
+        }
 
         $data['media_file_id'] = FormMedia::resolveMediaFileId($data['media_upload'] ?? null, null);
 

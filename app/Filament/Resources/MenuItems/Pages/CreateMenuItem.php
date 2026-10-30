@@ -17,7 +17,6 @@ class CreateMenuItem extends CreateRecord
     {
         $this->translationData = [
             'en' => ['label' => $data['label_en'] ?? null, 'reply_text' => $data['reply_text_en'] ?? null],
-            'am' => ['label' => $data['label_am'] ?? null, 'reply_text' => $data['reply_text_am'] ?? null],
         ];
 
         $data['media_file_id'] = FormMedia::resolveMediaFileId($data['media_upload'] ?? null, null);
